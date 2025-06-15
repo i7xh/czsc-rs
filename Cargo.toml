@@ -1,0 +1,14 @@
+[package]
+name = "czsc-rs"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[[bin]]
+name = "czsc_rs"
+path = "build.rs"
+
+[workspace]
+members = [
+    "crates/pyo3-weight-backtest",
+]
