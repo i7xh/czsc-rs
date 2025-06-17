@@ -1,4 +1,5 @@
 use polars::prelude::*;
+use polars::io::ipc::IpcReader;
 use pyo3_polars::PyDataFrame;
 use weight_backtest_pyo3::WeightBacktest;
 
@@ -21,10 +22,21 @@ fn create_test_df() -> DataFrame {
         Column::from(Series::new(PlSmallStr::from("price"), price)),
     ]).unwrap()
 }
+fn read_feather_sync(path: &str) -> DataFrame {
+    // 打开文件
+    IpcReader::new(std::fs::File::open(path).expect("文件不存在"))
+        .finish()
+        .expect("Feather 格式错误")
+}
 
 #[test]
 fn test_backtest_engine_creation() {
-    let df = create_test_df();
+    // let df = create_test_df();
+    let df = read_feather_sync("/Users/i7xh/Downloads/weight_example.feather");
+
+    let col_names = df.get_column_names();
+    println!("方法1 - 所有列名: {:?}", col_names);
+
     let py_df = PyDataFrame(df);
     let engine = WeightBacktest::new(
         py_df,

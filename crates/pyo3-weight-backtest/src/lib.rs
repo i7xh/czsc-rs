@@ -1,22 +1,17 @@
 mod models;
+pub mod engine;
+pub mod utils;
+mod errors;
 
 use pyo3::prelude::*;
 use polars::prelude::*;
 use pyo3_polars::PyDataFrame;
 use crate::models::{
     daily_result::DailyResult,
-    trade_pair::TradePair,
     performance_stats::PerformanceStats,
+    trade_pair::TradePair,
 };
 
-#[derive(Debug, Clone)]
-pub struct BacktestConfig {
-    pub digits: usize,
-    pub fee_rate: f32,
-    pub weight_type: String,
-    pub yearly_days: usize,
-    pub n_jobs: usize,
-}
 
 #[pyclass]
 pub struct WeightBacktest {
@@ -29,7 +24,7 @@ pub struct WeightBacktest {
 impl WeightBacktest {
     #[new]
     pub fn new(py_df: PyDataFrame, digits: usize, weight_type: &str, fee_rate: f32, yearly_days: usize, n_job: usize) -> PyResult<Self> {
-       let config = BacktestConfig {
+       let config = utils::BacktestConfig {
             digits,
             fee_rate,
             weight_type: weight_type.to_string(),
@@ -37,7 +32,9 @@ impl WeightBacktest {
             n_jobs: n_job, // Default to single-threaded
         };
         println!("config: {:?}", config);
-        let polar_df: DataFrame = py_df.into();
+        let mut polar_df: DataFrame = py_df.into();
+        let is_ok = engine::run_backtest(&mut polar_df, &config).is_ok();
+        println!("is_ok: {}", is_ok);
         let daily_results: Vec<DailyResult> = vec![]; // Initialize with the results from the DataFrame
         let trade_pairs: Vec<TradePair> = vec![]; // Initialize with an empty vector
         let performance_stats = PerformanceStats::default(); // Initialize with default values
