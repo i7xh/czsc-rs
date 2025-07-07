@@ -1,36 +1,139 @@
-use std::error::Error;
-use std::fmt;
 use polars::error::PolarsError;
+use pyo3::PyErr;
 use rayon::ThreadPoolBuildError;
+use std::io;
+use thiserror::Error;
 
-#[derive(Debug)]
-pub enum BacktestError {
-    Polars(PolarsError),
+#[derive(Error, Debug)]
+pub enum CzscError {
+    /// 数据验证错误
+    #[error("数据验证失败: {0}")]
     Validation(String),
-    Processing(String),
-    Rayon(ThreadPoolBuildError),
+
+    /// 数据处理错误
+    #[error("数据处理错误: {0}")]
+    DataProcessing(String),
+
+    /// 回测逻辑错误
+    #[error("回测逻辑错误: {0}")]
+    BacktestLogic(String),
+
+    /// 性能计算错误
+    #[error("绩效计算错误: {0}")]
+    Performance(String),
+
+    /// Python交互错误
+    #[error("Python交互错误: {0}")]
+    PythonInteraction(String),
+
+    /// 输入输出错误
+    #[error("IO错误: {0}")]
+    Io(#[from] io::Error),
+
+    /// 序列化/反序列化错误
+    #[error("序列化错误: {0}")]
+    Serialization(String),
+
+    /// Polars数据处理错误
+    #[error("Polars错误: {0}")]
+    Polars(#[from] PolarsError),
+
+    // Rayon 并行处理错误
+    #[error("Rayon 错误: {0}")]
+    Rayon(#[from] ThreadPoolBuildError),
+
+    /// 未知错误
+    #[error("未知错误: {0}")]
+    Unknown(String),
 }
 
-impl fmt::Display for BacktestError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            BacktestError::Polars(e) => write!(f, "Polars error: {}", e),
-            BacktestError::Validation(e) => write!(f, "Validation error: {}", e),
-            BacktestError::Processing(e) => write!(f, "Processing error: {}", e),
-            BacktestError::Rayon(e) => write!(f, "Rayon error: {}", e),
+impl From<serde_json::Error> for CzscError {
+    fn from(err: serde_json::Error) -> Self {
+        CzscError::Serialization(err.to_string())
+    }
+}
+
+impl From<String> for CzscError {
+    fn from(err: String) -> Self {
+        CzscError::Unknown(err)
+    }
+}
+
+impl From<anyhow::Error> for CzscError {
+    fn from(err: anyhow::Error) -> Self {
+        CzscError::Unknown(err.to_string())
+    }
+}
+
+// 实现 PyO3 错误转换
+impl From<CzscError> for PyErr {
+    fn from(err: CzscError) -> PyErr {
+        match err {
+            CzscError::Validation(msg) => pyo3::exceptions::PyValueError::new_err(msg),
+            _ => pyo3::exceptions::PyRuntimeError::new_err(err.to_string()),
         }
     }
 }
 
-impl From<PolarsError> for BacktestError {
-    fn from(err: PolarsError) -> Self {
-        BacktestError::Polars(err)
-    }
+#[macro_export]
+macro_rules! czsc_err {
+    // 无额外参数的简单错误 (e.g., czsc_err!(Validation))
+    ($variant:ident) => {
+        CzscError::$variant(String::new())
+    };
+    // 直接传递字符串或实现 ToString 的类型 (e.g., czsc_err!(Validation, "error"))
+    ($variant:ident, $msg:expr) => {
+        CzscError::$variant($msg.to_string())
+    };
+    // 支持格式化字符串 (e.g., czsc_err!(Validation, "Error: {}", value))
+    ($variant:ident, $fmt:expr, $($arg:tt)*) => {
+        CzscError::$variant(format!($fmt, $($arg)*))
+    };
 }
 
-impl From<ThreadPoolBuildError> for BacktestError {
-    fn from(err: ThreadPoolBuildError) -> Self {
-        BacktestError::Rayon(err)
+// 扩展 Result 类型
+pub type CzscResult<T> = Result<T, CzscError>;
+
+/// 为错误添加上下文
+pub trait ErrorContext<T, E> {
+    fn context(self, context: &str) -> CzscResult<T>;
+}
+
+impl<T, E> ErrorContext<T, E> for Result<T, E>
+where
+    E: Into<CzscError>,
+{
+    fn context(self, context: &str) -> CzscResult<T> {
+        self.map_err(|e| {
+            let base_err: CzscError = e.into();
+            match base_err {
+                CzscError::Validation(msg) => {
+                    CzscError::Validation(format!("{}: {}", context, msg))
+                }
+                CzscError::DataProcessing(msg) => {
+                    CzscError::DataProcessing(format!("{}: {}", context, msg))
+                }
+                CzscError::BacktestLogic(msg) => {
+                    CzscError::BacktestLogic(format!("{}: {}", context, msg))
+                }
+                CzscError::Performance(msg) => {
+                    CzscError::Performance(format!("{}: {}", context, msg))
+                }
+                CzscError::PythonInteraction(msg) => {
+                    CzscError::PythonInteraction(format!("{}: {}", context, msg))
+                }
+                CzscError::Io(e) => {
+                    CzscError::Io(io::Error::new(e.kind(), format!("{}: {}", context, e)))
+                }
+                CzscError::Serialization(msg) => {
+                    CzscError::Serialization(format!("{}: {}", context, msg))
+                }
+                CzscError::Polars(e) => CzscError::Polars(e),
+                CzscError::Unknown(msg) => {
+                    CzscError::Unknown(format!("{}: {}", context, msg))
+                }
+                CzscError::Rayon(e) => CzscError::Rayon(e),
+            }
+        })
     }
-    
 }

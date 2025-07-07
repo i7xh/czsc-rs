@@ -1,5 +1,5 @@
-use polars::prelude::*;
 use polars::io::ipc::IpcReader;
+use polars::prelude::*;
 use pyo3_polars::PyDataFrame;
 use weight_backtest_pyo3::WeightBacktest;
 
@@ -20,7 +20,8 @@ fn create_test_df() -> DataFrame {
         Column::from(Series::new(PlSmallStr::from("symbol"), symbol)),
         Column::from(Series::new(PlSmallStr::from("weight"), weight)),
         Column::from(Series::new(PlSmallStr::from("price"), price)),
-    ]).unwrap()
+    ])
+    .unwrap()
 }
 fn read_feather_sync(path: &str) -> DataFrame {
     // 打开文件
@@ -38,14 +39,7 @@ fn test_backtest_engine_creation() {
     println!("方法1 - 所有列名: {:?}", col_names);
 
     let py_df = PyDataFrame(df);
-    let engine = WeightBacktest::new(
-        py_df,
-        2,
-        &*"ts".to_string(),
-        0.0002,
-        252,
-        1,
-    );
+    let engine = WeightBacktest::new(py_df, 2, &*"ts".to_string(), 0.0002, 252, 1);
 
     assert!(engine.is_ok());
     // let engine = engine.unwrap();

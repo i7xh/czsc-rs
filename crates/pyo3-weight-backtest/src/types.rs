@@ -1,7 +1,108 @@
+use chrono::NaiveDateTime;
 use pyo3::prelude::*;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-/// 绩效统计指标结构体
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[pyclass]
+pub struct DailyResult {
+    #[pyo3(get)]
+    pub date: String,
+
+    #[pyo3(get)]
+    pub symbol: String,
+
+    #[pyo3(get)]
+    pub edge: f32,
+
+    #[pyo3(get, name = "return")]
+    pub return_val: f32,
+
+    #[pyo3(get)]
+    pub cost: f32,
+
+    #[pyo3(get)]
+    pub n1b: f32,
+
+    #[pyo3(get)]
+    pub turnover: f32,
+
+    #[pyo3(get)]
+    pub long_edge: f32,
+
+    #[pyo3(get)]
+    pub long_cost: f32,
+
+    #[pyo3(get)]
+    pub long_return: f32,
+
+    #[pyo3(get)]
+    pub long_turnover: f32,
+
+    #[pyo3(get)]
+    pub short_edge: f32,
+
+    #[pyo3(get)]
+    pub short_cost: f32,
+
+    #[pyo3(get)]
+    pub short_return: f32,
+
+    #[pyo3(get)]
+    pub short_turnover: f32,
+}
+
+#[derive(Debug, Clone)]
+pub enum TradeAction {
+    OpenLong { dt: NaiveDateTime, price: f32, bar_id: usize },
+    OpenShort { dt: NaiveDateTime, price: f32, bar_id: usize },
+    CloseLong { dt: NaiveDateTime, price: f32, bar_id: usize },
+    CloseShort { dt: NaiveDateTime, price: f32, bar_id: usize },
+}
+
+
+// 交易方向枚举
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub enum Direction {
+    Long,
+    Short,
+}
+
+// 交易对结构体
+#[derive(Debug, Clone, Serialize)]
+pub struct TradePair {
+    pub symbol:         String,
+    pub direction:      Direction,
+    pub open_dt:        NaiveDateTime,
+    pub close_dt:       NaiveDateTime,
+    pub open_price:     f64,
+    pub close_price:    f64,
+    pub bar_count:      usize,
+    pub event_sequence: String,
+    pub holding_days:   i64,
+    pub profit_ratio:   f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DailyMetrics {
+    // FIXME: 根据实际需要添加字段
+    pub date: String,
+    pub symbol: String,
+    pub edge: f64,
+    pub return_val: f64,
+    pub cost: f64,
+    pub n1b: f64,
+    pub turnover: f64,
+    pub long_edge: f64,
+    pub short_edge: f64,
+    // 其他字段...
+}
+
+#[derive(Serialize, Debug)]
+pub struct SymbolResult {
+    pub daily_metrics: Vec<DailyMetrics>,
+    pub trade_pairs: Vec<TradePair>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[pyclass]
 pub struct PerformanceStats {
@@ -81,7 +182,6 @@ pub struct PerformanceStats {
     pub drawdown_risk: f32,
 }
 
-/// 默认值实现
 impl Default for PerformanceStats {
     fn default() -> Self {
         Self {
