@@ -6,7 +6,7 @@ mod trade_position;
 mod calculator;
 pub mod config;
 
-use crate::types::{DailyResult, PerformanceStats, TradePair};
+use crate::types::TradePair;
 use polars::prelude::*;
 use pyo3::prelude::*;
 use pyo3_polars::PyDataFrame;
@@ -15,9 +15,9 @@ use crate::engine::BacktestEngine;
 
 #[pyclass]
 pub struct WeightBacktest {
-    daily_results: Vec<DailyResult>,
+    // daily_results: Vec<DailyResult>,
     trade_pairs: Vec<TradePair>,
-    performance_stats: PerformanceStats,
+    // performance_stats: PerformanceStats,
 }
 
 #[pymethods]
@@ -31,13 +31,13 @@ impl WeightBacktest {
         yearly_days: usize,
         n_job: usize,
     ) -> PyResult<Self> {
-        let config = BacktestConfig {
+        let config = BacktestConfig::new(
             digits,
             fee_rate,
-            weight_type: weight_type.to_string(),
+            weight_type.to_string(),
             yearly_days,
-            n_jobs: n_job, // Default to single-threaded
-        };
+            n_job,
+        )?;
 
         println!("config: {:?}", config);
         let polar_df: DataFrame = py_df.into();
@@ -52,7 +52,5 @@ impl WeightBacktest {
 #[pymodule]
 fn weight_backtest_pyo3(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<WeightBacktest>()?;
-    m.add_class::<DailyResult>()?;
-    m.add_class::<PerformanceStats>()?;
     Ok(())
 }

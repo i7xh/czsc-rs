@@ -2,6 +2,7 @@ use polars::io::ipc::IpcReader;
 use polars::prelude::*;
 use polars::prelude::*;
 use weight_backtest_pyo3::config::BacktestConfig;
+use weight_backtest_pyo3::engine::BacktestEngine;
 
 fn read_feather_sync(path: &str) -> DataFrame {
     // 打开文件
@@ -18,8 +19,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ts".to_string(), // weight_type
         252,              // yearly_days
         1,                // n_jobs
-    );
+    )?;
 
+    let engine = BacktestEngine::new(df, config.clone())?;
+    println!("engine: {:?}", engine);
+    let r = engine.run();
+    println!("run result: {:?}", r);
     // let daily_result = weight_backtest_pyo3::data_processing::calc_daily_results(df.clone(), "ZZUR9001", &config)?.collect()?;    // 应用函数
     // let shifted = engine::data_processing::gen_trade_pairs(df, "ZZUR9001", &config)?;
 

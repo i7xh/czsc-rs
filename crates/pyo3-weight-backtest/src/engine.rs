@@ -26,20 +26,30 @@ impl BacktestEngine {
         let symbols = df
             .column("symbol")?
             .str()?
+            .unique()?
             .into_iter()
             .flatten()
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
+        println!("Symbols found: {:?}", symbols);
+
         // 预处理 dataframe
         let prepared_df= df.lazy()
             .with_columns([col("weight")
-                .cast(DataType::Float32)
+                .cast(DataType::Float64)
                 .round(config.digits as u32, HalfAwayFromZero)
                 .alias("weight")])
+            .with_column(
+                (col("weight") * lit(10f64.powi(config.digits as i32)))
+                    .cast(DataType::Int32)
+                    .alias("volume"),
+            )
             .sort(["dt"], SortMultipleOptions::default())
+            .with_row_index("bar_id", Some(0))
             .collect()?;
         
+
         let calculator = MetricCalculator::new(config.clone());
 
         Ok(Self { config, df: prepared_df, symbols, calculator})
@@ -48,20 +58,24 @@ impl BacktestEngine {
     pub fn run(&self) -> CzscResult<()> {
         let n_jobs = self.config.n_jobs;
 
-        if n_jobs > 1 {
+        let symbol_results = if n_jobs > 1 {
             // 多线程处理
-            self.run_parallel();
+            self.run_parallel()?
         } else {
             // 单线程处理
-            self.run_sequential();
-        }
+            self.run_sequential()?
+        };
+        
+        // 计算组合指标
+        self.calculator.calculate_portfolio_metrics(&symbol_results)?;
+        
         unimplemented!()
     }
 
     fn run_sequential(&self) -> CzscResult<HashMap<String, SymbolResult>> {
-        
+
         let mut results: HashMap<String, SymbolResult> = HashMap::new();
-        
+
         for symbol in self.symbols.iter() {
             let sr = self.process_symbol(symbol)?;
             results.insert(symbol.clone(), sr);
@@ -69,10 +83,9 @@ impl BacktestEngine {
         Ok(results)
     }
 
-    fn run_parallel(&self) -> CzscResult<()> {
-        unimplemented!()
-    }
-    
+    fn run_parallel(&self) -> CzscResult<HashMap<String, SymbolResult>> {
+        unimplemented!() }
+
     fn process_symbol(
         &self,
         symbol: &String,
@@ -83,12 +96,20 @@ impl BacktestEngine {
             .filter(col("symbol").eq(lit(symbol.clone())))
             .collect()?;
         
+        let column_names = symbol_df.get_column_names();
+        println!("Processing symbol: {}, columns: {:?}", symbol, column_names);
+
         // 生成每日结果
-        let daily_df = self.calculator.calculate_daily_metrics(symbol, &symbol_df)?;
+        let daily_metrics = self.calculator.calculate_daily_metrics(symbol, &symbol_df)?;
         // 生成交易对
         let trade_pairs = self.calculator.generate_trade_pairs(symbol, &symbol_df)?;
-        
-        unimplemented!();
+
+        Ok(
+            SymbolResult {
+                daily_metrics,
+                trade_pairs,
+            }
+        )
     }
 }
 
