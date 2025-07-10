@@ -3,8 +3,10 @@ mod errors;
 mod types;
 pub mod utils;
 mod trade_position;
-mod calculator;
+mod processor;
 pub mod config;
+mod stats;
+mod analyzer;
 
 use crate::types::TradePair;
 use polars::prelude::*;
@@ -43,7 +45,7 @@ impl WeightBacktest {
         let polar_df: DataFrame = py_df.into();
 
         let engine = BacktestEngine::new(polar_df, config)?;
-        let _ = engine.run()?;
+        let _ = engine.run_backtest()?;
         unimplemented!()
     }
 

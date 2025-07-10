@@ -1,5 +1,5 @@
+use anyhow::anyhow;
 use crate::errors::{CzscError, CzscResult};
-use crate::czsc_err;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WeightType {
@@ -28,7 +28,7 @@ impl BacktestConfig {
         let weight_type_enum = match weight_type.to_lowercase().as_str() {
             "ts" => WeightType::TimeSeries,
             "cs" => WeightType::CrossSection,
-            _ => return Err(czsc_err!(Unknown, "Invalid weight_type {:?}, must be 'ts' or 'cs'", weight_type)),
+            _ => return Err(anyhow!("Invalid weight_type {:?}, must be 'ts' or 'cs'", weight_type).into()),
         };
         
         Ok(BacktestConfig {

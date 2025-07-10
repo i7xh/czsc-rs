@@ -1,25 +1,25 @@
 use std::collections::{HashMap, VecDeque};
+use anyhow::anyhow;
 use chrono::{NaiveDate, NaiveDateTime};
 use super::types::*;
 use polars::prelude::*;
 use crate::config::{BacktestConfig, WeightType};
-use crate::errors::CzscError;
-use crate::czsc_err;
 use crate::errors::CzscResult;
+use crate::stats::{daily_performance};
 use crate::trade_position::TradePositionState;
 use crate::types::TradeAction::{CloseLong, CloseShort, OpenLong, OpenShort};
 
 #[derive(Debug, Clone)]
-pub struct MetricCalculator {
+pub struct MetricProcessor {
     config: BacktestConfig,
 }
 
-impl MetricCalculator {
+impl MetricProcessor {
     pub fn new(config: BacktestConfig) -> Self {
         Self { config }
     }
 
-    pub fn calculate_daily_metrics(
+    pub fn process_daily_metrics(
         &self,
         symbol: &str,
         symbol_df: &DataFrame,
@@ -201,7 +201,7 @@ impl MetricCalculator {
                     (dt, volume, price, bar_id, weight)
                 }
                 _ =>
-                    return Err(czsc_err!(Unknown, "DataFrame contains null values in required columns"))
+                    return Err(anyhow!("DataFrame contains null values in required columns").into())
             };
             let actions = state.handle_transition(volume, dt, price as f32, bar_id as usize);
             all_actions.extend(actions);
@@ -311,79 +311,4 @@ impl MetricCalculator {
         Ok(trade_pairs)
     }
 
-    pub fn calculate_portfolio_metrics(
-        &self,
-        symbol_result: &HashMap<String, SymbolResult>,
-    ) -> CzscResult<()> {
-
-        let mut portfolio_returns = Vec::new();
-        let mut dates = Vec::new();
-
-        let all_daily_metrics: Vec<DailyMetric> = symbol_result
-            .values()
-            .flat_map(|sr| sr.daily_metrics.iter().cloned())
-            .collect();
-
-        // 按日期分组
-        let mut grouped_by_date: HashMap<NaiveDate, Vec<DailyMetric>> = HashMap::new();
-
-        for metric in &all_daily_metrics {
-            grouped_by_date
-                .entry(metric.date)
-                .or_default()
-                .push(metric.clone());
-        }
-
-        // 按日期排序
-        let mut sorted_dates: Vec<NaiveDate> = grouped_by_date.keys().cloned().collect();
-        sorted_dates.sort();
-
-        // 计算组合每日收益
-        for date in sorted_dates {
-            let metrics = grouped_by_date.get(&date).unwrap();
-
-            // 根据策略类型计算组合收益
-            let portfolio_return = match self.config.weight_type {
-                WeightType::TimeSeries => {
-                    metrics.iter().map(|m| m.return_val).sum::<f64>() / metrics.len() as f64
-                }
-                WeightType::CrossSection => {
-                    metrics.iter().map(|m| m.return_val).sum()
-                }
-            };
-            portfolio_returns.push(portfolio_return);
-            dates.push(date);
-        }
-        // 6. 计算组合绩效指标
-        let total_return = portfolio_returns.iter().fold(1.0, |acc, &r| acc * (1.0 + r)) - 1.0;
-        // 计算最大回撤
-        let mut max_drawdown = 0.0;
-        let mut peak = 1.0;
-        let mut equity = 1.0;
-
-        for &ret in &portfolio_returns {
-            equity *= 1.0 + ret;
-            if equity > peak {
-                peak = equity;
-            }
-            let drawdown = (peak - equity) / peak;
-            if drawdown > max_drawdown {
-                max_drawdown = drawdown;
-            }
-        }
-
-        // 计算夏普比率（简化版）
-        let mean_return = portfolio_returns.iter().sum::<f64>() / portfolio_returns.len() as f64;
-        let std_dev = (portfolio_returns.iter()
-            .map(|r| (r - mean_return).powi(2))
-            .sum::<f64>() / portfolio_returns.len() as f64).sqrt();
-
-        let sharpe_ratio = if std_dev > 0.0 {
-            mean_return / std_dev * (self.config.yearly_days as f64).sqrt()
-        } else {
-            0.0
-        };
-
-        unimplemented!()
-    }
 }

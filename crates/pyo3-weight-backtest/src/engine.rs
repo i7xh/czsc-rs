@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use anyhow::Context; // 引入 Context trait
 use polars::prelude::*;
 use polars::prelude::RoundMode::HalfAwayFromZero;
-use crate::calculator::MetricCalculator;
+use crate::analyzer::PortfolioAnalyzer;
+use crate::processor::MetricProcessor;
 use crate::errors::CzscResult;
 use crate::utils::validate_dataframe;
 use crate::config::BacktestConfig;
@@ -13,7 +14,8 @@ pub struct BacktestEngine {
     config: BacktestConfig,
     df: DataFrame,
     symbols: Vec<String>,
-    calculator: MetricCalculator,
+    processor: MetricProcessor,
+    analyzer: PortfolioAnalyzer,
 }
 
 impl BacktestEngine {
@@ -50,15 +52,15 @@ impl BacktestEngine {
             .collect()?;
         
 
-        let calculator = MetricCalculator::new(config.clone());
+        let processor = MetricProcessor::new(config.clone());
+        let analyzer = PortfolioAnalyzer::new(config.clone());
 
-        Ok(Self { config, df: prepared_df, symbols, calculator})
+        Ok(Self { config, df: prepared_df, symbols, processor, analyzer})
     }
 
-    pub fn run(&self) -> CzscResult<()> {
-        let n_jobs = self.config.n_jobs;
+    pub fn run_backtest(&self) -> CzscResult<()> {
 
-        let symbol_results = if n_jobs > 1 {
+        let symbol_results = if self.config.n_jobs > 1 {
             // 多线程处理
             self.run_parallel()?
         } else {
@@ -67,7 +69,7 @@ impl BacktestEngine {
         };
         
         // 计算组合指标
-        self.calculator.calculate_portfolio_metrics(&symbol_results)?;
+        self.analyzer.analyze_portfolio_metrics(&symbol_results)?;
         
         unimplemented!()
     }
@@ -100,9 +102,9 @@ impl BacktestEngine {
         println!("Processing symbol: {}, columns: {:?}", symbol, column_names);
 
         // 生成每日结果
-        let daily_metrics = self.calculator.calculate_daily_metrics(symbol, &symbol_df)?;
+        let daily_metrics = self.processor.process_daily_metrics(symbol, &symbol_df)?;
         // 生成交易对
-        let trade_pairs = self.calculator.generate_trade_pairs(symbol, &symbol_df)?;
+        let trade_pairs = self.processor.generate_trade_pairs(symbol, &symbol_df)?;
 
         Ok(
             SymbolResult {
