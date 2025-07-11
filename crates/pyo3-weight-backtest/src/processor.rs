@@ -130,7 +130,7 @@ impl MetricProcessor {
                 col("short_return").sum().alias("short_return"),
                 col("short_turnover").sum().alias("short_turnover"),
             ])
-            .sort(["date"], SortMultipleOptions::default())
+            // .sort(["date"], SortMultipleOptions::default())
             .collect()?;
 
         let mut daily_metrics = Vec::with_capacity(aggregated_df.height());
