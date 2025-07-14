@@ -1,6 +1,5 @@
 use polars::io::ipc::IpcReader;
 use polars::prelude::*;
-use polars::prelude::*;
 use weight_backtest_pyo3::config::BacktestConfig;
 use weight_backtest_pyo3::engine::BacktestEngine;
 

@@ -1,14 +1,12 @@
 use std::collections::HashMap;
-use std::ops::Div;
 use anyhow::anyhow;
-use chrono::NaiveDate;
 use polars::prelude::*;
-use polars::prelude::DataType::Date;
 use polars_ops::pivot::pivot;
 use pyo3::impl_::wrap::SomeWrap;
 use crate::config::{BacktestConfig, WeightType};
-use crate::errors::{CzscError, CzscResult};
-use crate::types::{DailyMetric, SymbolResult};
+use crate::errors::CzscResult;
+use crate::stats::daily_performance;
+use crate::types::{DailyMetric, SymbolResult, TradePair};
 
 enum AggType { Mean, Sum }
 
@@ -22,7 +20,45 @@ impl PortfolioAnalyzer {
         PortfolioAnalyzer { config }
     }
 
-    fn to_dateframe(metrics: &[DailyMetric]) -> CzscResult<DataFrame> {
+    fn to_trade_pair_dateframe(pairs: &[TradePair]) -> CzscResult<DataFrame> {
+        let mut symbols = Vec::with_capacity(pairs.len());
+        let mut directions = Vec::with_capacity(pairs.len());
+        let mut open_dts = Vec::with_capacity(pairs.len());
+        let mut close_dts = Vec::with_capacity(pairs.len());
+        let mut open_prices = Vec::with_capacity(pairs.len());
+        let mut close_prices = Vec::with_capacity(pairs.len());
+        let mut bar_counts = Vec::with_capacity(pairs.len());
+        let mut holding_days = Vec::with_capacity(pairs.len());
+        let mut profit_ratios = Vec::with_capacity(pairs.len());
+
+
+        for pair in pairs {
+            symbols.push(pair.symbol.clone());
+            directions.push(pair.direction);
+            open_dts.push(pair.open_dt);
+            close_dts.push(pair.close_dt);
+            open_prices.push(pair.open_price);
+            close_prices.push(pair.close_price);
+            bar_counts.push(pair.bar_count as i64);
+            holding_days.push(pair.holding_days);
+            profit_ratios.push(pair.profit_ratio);
+        }
+
+        Ok(
+            df![
+                "symbol" => symbols,
+                // "direction" => directions,
+                "open_dt" => open_dts,
+                "close_dt" => close_dts,
+                "open_price" => open_prices,
+                "close_price" => close_prices,
+                "bar_count" => bar_counts,
+                "holding_days" => holding_days,
+                "profit_ratio" => profit_ratios,
+            ]?)
+    }
+
+    fn to_daily_dateframe(metrics: &[DailyMetric]) -> CzscResult<DataFrame> {
         let mut dates = Vec::with_capacity(metrics.len());
         let mut symbols = Vec::with_capacity(metrics.len());
         let mut edges = Vec::with_capacity(metrics.len());
@@ -88,7 +124,7 @@ impl PortfolioAnalyzer {
             .unwrap_or(lit(0.0));
 
         let expr = match agg_type {
-            AggType::Mean => agg_expr.div(lit(symbols.len() as f64)).alias("total"),
+            AggType::Mean => (agg_expr / lit(symbols.len() as f64)).alias("total"),
             AggType::Sum => agg_expr.alias("total"),
         };
         Ok(lf.with_columns([expr]))
@@ -104,7 +140,7 @@ impl PortfolioAnalyzer {
             .cloned()
             .collect::<Vec<DailyMetric>>();
 
-        let daily_metric_df: DataFrame = Self::to_dateframe(&all_daily_metrics)?;
+        let daily_metric_df: DataFrame = Self::to_daily_dateframe(&all_daily_metrics)?;
 
         let dret_df = pivot(
             &daily_metric_df,
@@ -143,11 +179,32 @@ impl PortfolioAnalyzer {
             .with_row_index("idx", Some(0));
 
         let dret_df = dret_lf.collect()?;
-        println!("Aggregated DataFrame:\n{}", dret_df);
+
+        let mut res = HashMap::new();
+        res.insert("品种等权日收益".to_string(), &dret_df);
 
         //TODO: 进一步分析和处理数据
+        let ca = dret_df.column("date")?.date()?;
+        if let Some(min) = ca.min() {
+            println!("数据集最小日期: {}", min);
+        }
+        if  let Some(max) = ca.max() {
+            println!("数据集最大日期: {}", max);
+        }
+
+        let returns: Vec<f64> = dret_df.column("total")?.f64()?
+            .into_iter()
+            .flatten()
+            .collect();
+        daily_performance(&returns, Some(self.config.yearly_days as f64));
+
+        let trade_pairs: Vec<TradePair> = symbol_results
+            .values()
+            .flat_map(|sr| sr.trade_pairs.iter().cloned())
+            .collect();
+
+        let trade_pair_df = Self::to_trade_pair_dateframe(&trade_pairs);
+
         unimplemented!()
     }
-
-
 }
