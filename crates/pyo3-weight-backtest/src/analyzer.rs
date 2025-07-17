@@ -1,12 +1,12 @@
+use polars::prelude::*;
 use std::collections::HashMap;
 use anyhow::anyhow;
-use polars::prelude::*;
 use polars_ops::pivot::pivot;
-use pyo3::impl_::wrap::SomeWrap;
 use crate::config::{BacktestConfig, WeightType};
-use crate::errors::CzscResult;
-use crate::stats::daily_performance;
-use crate::types::{DailyMetric, SymbolResult, TradePair};
+use crate::errors::{CzscError, CzscResult};
+use crate::stats::{daily_performance, evaluate_pairs};
+use crate::types::{DailyMetric, Direction, SymbolResult, TradePair, MetricKey};
+use crate::utils::RoundTo;
 
 enum AggType { Mean, Sum }
 
@@ -18,44 +18,6 @@ pub struct PortfolioAnalyzer {
 impl PortfolioAnalyzer {
     pub fn new(config: BacktestConfig) -> Self {
         PortfolioAnalyzer { config }
-    }
-
-    fn to_trade_pair_dateframe(pairs: &[TradePair]) -> CzscResult<DataFrame> {
-        let mut symbols = Vec::with_capacity(pairs.len());
-        let mut directions = Vec::with_capacity(pairs.len());
-        let mut open_dts = Vec::with_capacity(pairs.len());
-        let mut close_dts = Vec::with_capacity(pairs.len());
-        let mut open_prices = Vec::with_capacity(pairs.len());
-        let mut close_prices = Vec::with_capacity(pairs.len());
-        let mut bar_counts = Vec::with_capacity(pairs.len());
-        let mut holding_days = Vec::with_capacity(pairs.len());
-        let mut profit_ratios = Vec::with_capacity(pairs.len());
-
-
-        for pair in pairs {
-            symbols.push(pair.symbol.clone());
-            directions.push(pair.direction);
-            open_dts.push(pair.open_dt);
-            close_dts.push(pair.close_dt);
-            open_prices.push(pair.open_price);
-            close_prices.push(pair.close_price);
-            bar_counts.push(pair.bar_count as i64);
-            holding_days.push(pair.holding_days);
-            profit_ratios.push(pair.profit_ratio);
-        }
-
-        Ok(
-            df![
-                "symbol" => symbols,
-                // "direction" => directions,
-                "open_dt" => open_dts,
-                "close_dt" => close_dts,
-                "open_price" => open_prices,
-                "close_price" => close_prices,
-                "bar_count" => bar_counts,
-                "holding_days" => holding_days,
-                "profit_ratio" => profit_ratios,
-            ]?)
     }
 
     fn to_daily_dateframe(metrics: &[DailyMetric]) -> CzscResult<DataFrame> {
@@ -130,10 +92,70 @@ impl PortfolioAnalyzer {
         Ok(lf.with_columns([expr]))
     }
 
+    fn get_alpha_df(&self, df: &DataFrame) -> CzscResult<DataFrame> {
+
+        // 分组聚合计算平均值
+        let grouped = df
+            .clone()
+            .lazy()
+            .group_by([col("date")])
+            .agg([
+                col("return").mean().alias("策略"),
+                col("n1b").mean().alias("基准"),
+            ])
+            .collect()?;
+
+        // 计算超额收益
+        let result = grouped
+            .lazy()
+            .with_columns([(col("策略") - col("基准")).alias("超额")])
+            .select(&[
+                col("date"),
+                col("策略"),
+                col("基准"),
+                col("超额"),
+            ])
+            .collect()?;
+
+        Ok(result)
+    }
+
+    fn calculate_longshort_rates(&self, dfw: &DataFrame) -> CzscResult<(f64, f64)> {
+        // 如果 DataFrame 为空，返回 (0.0, 0.0)
+        if dfw.is_empty() {
+            return Ok((0.0, 0.0));
+        }
+
+        // 使用表达式计算
+        let df = dfw
+            .clone()
+            .lazy()
+            .select([
+                // 计算总行数
+                // 计算多头数量
+                col("weight").gt(0.0).sum().alias("long_count"),
+                // 计算空头数量
+                col("weight").lt(0.0).sum().alias("short_count"),
+            ])
+            .collect()?;
+
+        // 提取结果
+        let total = dfw.height() as f64;
+        let long_count = df.column("long_count")?.get(0)?.try_extract::<f64>()?;
+        let short_count = df.column("short_count")?.get(0)?.try_extract::<f64>()?;
+
+        // 计算比例
+        let long_rate = long_count / total;
+        let short_rate = short_count / total;
+
+        Ok((long_rate, short_rate))
+    }
+
     pub fn analyze_portfolio_metrics(
         &self,
+        df: &DataFrame,
         symbol_results: &HashMap<String, SymbolResult>
-    ) -> CzscResult<DataFrame> {
+    ) -> CzscResult<HashMap<String, f64>> {
         let all_daily_metrics = symbol_results
             .values()
             .flat_map(|r| &r.daily_metrics)
@@ -141,6 +163,8 @@ impl PortfolioAnalyzer {
             .collect::<Vec<DailyMetric>>();
 
         let daily_metric_df: DataFrame = Self::to_daily_dateframe(&all_daily_metrics)?;
+        let column_names = daily_metric_df.get_column_names();
+        println!("Pivoted DataFrame columns: {:?}", column_names);
 
         let dret_df = pivot(
             &daily_metric_df,
@@ -152,7 +176,6 @@ impl PortfolioAnalyzer {
             None,)?
             .fill_null(FillNullStrategy::Zero)?;
 
-        println!("Pivoted DataFrame:\n{}", dret_df);
         let symbols = symbol_results.keys().map(|s| s.as_str()).collect::<Vec<&str>>();
         let dret_lf = match self.config.weight_type {
             WeightType::TimeSeries => {
@@ -203,8 +226,85 @@ impl PortfolioAnalyzer {
             .flat_map(|sr| sr.trade_pairs.iter().cloned())
             .collect();
 
-        let trade_pair_df = Self::to_trade_pair_dateframe(&trade_pairs);
+        let mut stats = HashMap::new();
 
-        unimplemented!()
+        let trade_pairs_stats = evaluate_pairs(&trade_pairs, Direction::LongShort)?;
+
+        // 3. 添加关键指标到最终统计
+        stats.insert("单笔收益".to_string(), trade_pairs_stats.avg_profit_per_trade);
+        stats.insert("持仓K线数".to_string(), trade_pairs_stats.avg_bars_held);
+        stats.insert("交易胜率".to_string(), trade_pairs_stats.win_rate);
+        stats.insert("持仓天数".to_string(), trade_pairs_stats.avg_days_held);
+
+        // 4. 计算多头空头占比
+        let (long_rate, short_rate) = self.calculate_longshort_rates(&df)?;
+        stats.insert("多头占比".to_string(), long_rate.round_to(4));
+        stats.insert("空头占比".to_string(), short_rate.round_to(4));
+
+        let alpha_df = self.get_alpha_df(&daily_metric_df)?;let strategy_returns = alpha_df.column("策略")?.f64()?;
+        let benchmark_returns = alpha_df.column("基准")?.f64()?;
+
+        let strategy_std = strategy_returns.std(1).unwrap_or(f64::NAN);
+        let benchmark_std = benchmark_returns.std(1).unwrap_or(f64::NAN);
+
+        // 1. 波动比计算
+        stats.insert(
+            "波动比".to_string(),
+            if benchmark_std > 1e-6 && benchmark_std.is_finite() {
+                (strategy_std / benchmark_std).round_to(4)
+            } else {
+                f64::NAN
+            }
+        );
+
+
+        stats.insert(
+            "与基准波动相关性".to_string(),
+            alpha_df.clone()
+                .lazy()
+                .select(&[pearson_corr(col("策略"), col("基准").abs()).alias("相关系数")])
+                .collect()?
+                .column("相关系数")?
+                .f64()?
+                .get(0)
+                .unwrap()
+                .round_to(4)
+        );
+
+        stats.insert(
+            "与基准收益相关性".to_string(),
+            alpha_df.clone()
+                .lazy()
+                .select(&[pearson_corr(col("策略"), col("基准")).alias("相关系数")])
+                .collect()?
+                .column("相关系数")?
+                .f64()?
+                .get(0)
+                .unwrap()
+                .abs()
+                .round_to(4)
+        );
+
+        stats.insert(
+            "与基准空头相关性".to_string(),
+            alpha_df.clone()
+                .lazy()
+                .filter(col("基准").lt(0.0))
+                .select(&[pearson_corr(col("策略"), col("基准")).alias("相关系数")])
+                .collect()?
+                .column("相关系数")?
+                .f64()?
+                .get(0)
+                .unwrap()
+                .round_to(4)
+        );
+
+        stats.insert(
+            "品种数量".to_string(),
+            symbol_results.len() as f64
+        );
+
+        Ok(stats)
     }
+
 }

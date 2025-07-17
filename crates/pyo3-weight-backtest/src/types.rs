@@ -1,3 +1,4 @@
+use std::fmt;
 use chrono::{NaiveDate, NaiveDateTime};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,17 @@ pub enum TradeAction {
 pub enum Direction {
     Long,
     Short,
+    LongShort, // 代表多空都可以
+}
+
+impl fmt::Display for Direction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Direction::Long => write!(f, "Long"),
+            Direction::Short => write!(f, "Short"),
+            Direction::LongShort => write!(f, "LongShort"),
+        }
+    }
 }
 
 // 交易对结构体
@@ -31,6 +43,26 @@ pub struct TradePair {
     pub event_sequence: String,
     pub holding_days:   i64,
     pub profit_ratio:   f64,
+}
+
+#[derive(Debug, Default)]
+pub struct TradeEvaluation {
+    pub trade_direction: String,          // 交易方向
+    pub trade_count: usize,               // 交易次数
+    pub total_profit: f64,                // 累计收益
+    pub avg_profit_per_trade: f64,        // 单笔收益
+    pub win_count: usize,                 // 盈利次数
+    pub total_win_profit: f64,            // 累计盈利
+    pub avg_win_profit: f64,              // 单笔盈利
+    pub loss_count: usize,                // 亏损次数
+    pub total_loss: f64,                  // 累计亏损
+    pub avg_loss: f64,                    // 单笔亏损
+    pub win_rate: f64,                    // 交易胜率
+    pub total_profit_loss_ratio: f64,     // 累计盈亏比
+    pub avg_profit_loss_ratio: f64,       // 单笔盈亏比
+    pub break_even_point: f64,            // 盈亏平衡点
+    pub avg_days_held: f64,               // 平均持仓天数
+    pub avg_bars_held: f64,               // 平均持仓K线数
 }
 
 // DailyMetrics 结构体定义
@@ -112,4 +144,52 @@ pub struct PortfolioMetrics {
     // 其他
     pub skewness: f64,  // 收益偏度
     pub kurtosis: f64,  // 收益峰度
+}
+
+// 指标键枚举
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MetricKey {
+    TradeProfit,
+    HoldingBars,
+    WinRate,
+    HoldingDays,
+    LongRatio,
+    ShortRatio,
+    VolatilityRatio,
+    VolatilityCorrelation,
+    ReturnCorrelation,
+    BearCorrelation,
+    SymbolCount,
+    MaxDrawdown,
+    SharpeRatio,
+    StartDate,
+    EndDate,
+}
+
+impl MetricKey {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::TradeProfit => "单笔收益",
+            Self::HoldingBars => "持仓K线数",
+            Self::WinRate => "交易胜率",
+            Self::HoldingDays => "持仓天数",
+            Self::LongRatio => "多头占比",
+            Self::ShortRatio => "空头占比",
+            Self::VolatilityRatio => "波动比",
+            Self::VolatilityCorrelation => "与基准波动相关性",
+            Self::ReturnCorrelation => "与基准收益相关性",
+            Self::BearCorrelation => "与基准空头相关性",
+            Self::SymbolCount => "品种数量",
+            Self::MaxDrawdown => "最大回撤",
+            Self::SharpeRatio => "夏普比率",
+            Self::StartDate => "起始日期",
+            Self::EndDate => "结束日期",
+        }
+    }
+}
+
+impl ToString for MetricKey {
+    fn to_string(&self) -> String {
+        self.as_str().to_string()
+    }
 }

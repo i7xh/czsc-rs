@@ -28,11 +28,29 @@ pub fn validate_dataframe(df: &DataFrame) -> CzscResult<()> {
     Ok(())
 }
 
-pub fn union_lazyframes(
-    lazy_dfs: Vec<LazyFrame>,
-) -> CzscResult<LazyFrame> {
-    if lazy_dfs.is_empty() {
-        return Err(Validation("No LazyFrames to union".into()));
+pub trait RoundTo {
+    fn round_to(&self, decimals: u32) -> f64;
+}
+
+impl RoundTo for f64 {
+    fn round_to(&self, decimals: u32) -> f64 {
+        let factor = 10_f64.powi(decimals as i32);
+        (self * factor).round() / factor
     }
-    unimplemented!();
+}
+
+// 计算标准差
+pub fn standard_deviation(data: &[f64]) -> f64 {
+    if data.is_empty() {
+        return 0.0;
+    }
+
+    let n = data.len() as f64;
+    let mean = data.iter().sum::<f64>() / n;
+
+    let variance = data.iter()
+        .map(|x| (x - mean).powi(2))
+        .sum::<f64>() / n;
+
+    variance.sqrt()
 }

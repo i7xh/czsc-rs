@@ -7,6 +7,7 @@ mod processor;
 pub mod config;
 mod stats;
 mod analyzer;
+mod constants;
 
 use crate::types::TradePair;
 use polars::prelude::*;

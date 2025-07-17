@@ -69,7 +69,7 @@ impl BacktestEngine {
         };
         
         // 计算组合指标
-        self.analyzer.analyze_portfolio_metrics(&symbol_results)?;
+        self.analyzer.analyze_portfolio_metrics(&self.df, &symbol_results)?;
         
         unimplemented!()
     }

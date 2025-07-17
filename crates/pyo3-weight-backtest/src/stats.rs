@@ -1,171 +1,116 @@
 use polars::prelude::*;
 use std::collections::HashMap;
 use pyo3::impl_::wrap::SomeWrap;
+use crate::errors::CzscResult;
+use crate::types::{Direction, TradeEvaluation, TradePair};
+use crate::utils::RoundTo;
 
 // 计算盈亏平衡点的辅助函数
 fn cal_break_even_point(seq: &[f64]) -> f64 {
-    // 如果总收益为负，直接返回 1.0
-    if seq.iter().sum::<f64>() < 0.0 {
+    // 处理空序列或总收益为负的情况
+    if seq.is_empty() || seq.iter().sum::<f64>() < 0.0 {
         return 1.0;
     }
 
-    // 创建可排序的副本
+    // 创建可修改的副本并排序（升序）
     let mut sorted_seq = seq.to_vec();
-    sorted_seq.sort_by(|a, b| a.partial_cmp(b).unwrap()); // 从小到大排序
+    sorted_seq.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-    // 计算累积和
-    let mut cum_sum = 0.0;
-    let mut negative_count = 0;
+    let n = sorted_seq.len() as f64;
+    let mut cumulative_sum = 0.0;
+    let mut break_even_index = sorted_seq.len(); // 默认值（全部交易后平衡）
 
-    for &value in &sorted_seq {
-        cum_sum += value;
-        if cum_sum < 0.0 {
-            negative_count += 1;
+    // 遍历排序后的序列，找到第一个累计和 >= 0 的位置
+    for (i, &value) in sorted_seq.iter().enumerate() {
+        cumulative_sum += value;
+        if cumulative_sum >= 0.0 {
+            break_even_index = i + 1; // i 是从 0 开始，需要 +1
+            break;
         }
     }
 
-    // 计算盈亏平衡点
-    (negative_count as f64 + 1.0) / seq.len() as f64
+    // 返回盈亏平衡点比例
+    break_even_index as f64 / n
 }
 
-// 评估开平交易记录的表现
-pub fn evaluate_pairs(pairs: &DataFrame) -> HashMap<String, f64> {
-    
-    let trade_dir = pairs.column("交易方向")
-        .unwrap()
-        .str()
-        .unwrap()
-        .get(0)
-        .unwrap_or("多空");
+// 评估交易记录
+pub fn evaluate_pairs(pairs: &[TradePair], direction: Direction) -> CzscResult<TradeEvaluation> {
 
-    let mut p: HashMap<String, f64> = HashMap::new();
-    p.insert("交易方向".to_string(), if trade_dir == "多头" {
-        1.0
-    } else if trade_dir == "空头" {
-        -1.0
+    // 筛选指定方向的交易
+    let filtered_pairs: Vec<&TradePair> = if direction == Direction::LongShort {
+        pairs.iter().collect()
     } else {
-        0.0
-    });
-    p.insert("交易次数".to_string(), 0.0);
-    p.insert("累计收益".to_string(), 0.0);
-    p.insert("单笔收益".to_string(), 0.0);
-    p.insert("盈利次数".to_string(), 0.0);
-    p.insert("累计盈利".to_string(), 0.0);
-    p.insert("单笔盈利".to_string(), 0.0);
-    p.insert("亏损次数".to_string(), 0.0);
-    p.insert("累计亏损".to_string(), 0.0);
-    p.insert("单笔亏损".to_string(), 0.0);
-    p.insert("交易胜率".to_string(), 0.0);
-    p.insert("累计盈亏比".to_string(), 0.0);
-    p.insert("单笔盈亏比".to_string(), 0.0);
-    p.insert("盈亏平衡点".to_string(), 1.0);
-    p.insert("持仓天数".to_string(), 0.0);
-    p.insert("持仓K线数".to_string(), 0.0);
-
-    if pairs.height() == 0 {
-        return p;
-    }
-
-    // 筛选交易方向
-    let filtered_pairs = if trade_dir != "多空" {
-        let dir_filter = pairs.column("交易方向").unwrap()
-            .str()
-            .unwrap()
-            .equal(trade_dir);
-
-        match pairs.filter(&dir_filter) {
-            Ok(df) => df,
-            Err(_) => return p,
-        }
-    } else {
-        pairs.clone()
+        pairs.iter()
+            .filter(|p| p.direction == direction)
+            .collect()
     };
 
-    if filtered_pairs.height() == 0 {
-        return p;
+    let mut result = TradeEvaluation {
+        trade_direction: Direction::LongShort.to_string(),
+        ..Default::default()
+    };
+
+    // 如果筛选后为空，返回默认结果
+    if filtered_pairs.is_empty() {
+        return Ok(result);
     }
 
-    // 获取盈亏比例列
-    let returns = filtered_pairs.column("盈亏比例")
-        .unwrap()
-        .f64()
-        .unwrap();
+    // 计算基本统计
+    result.trade_count = filtered_pairs.len();
 
-    // 获取持仓天数和持仓K线数列
-    let hold_days = filtered_pairs.column("持仓天数")
-        .unwrap()
-        .f64()
-        .unwrap();
-    let hold_bars = filtered_pairs.column("持仓K线数")
-        .unwrap()
-        .f64()
-        .unwrap();
+    // 盈亏平衡点
+    let profit_ratios: Vec<f64> = filtered_pairs.iter()
+        .map(|p| p.profit_ratio)
+        .collect();
+    result.break_even_point = cal_break_even_point(&profit_ratios).round_to(4);
 
-    let n = filtered_pairs.height() as f64;
-    p.insert("交易次数".to_string(), n);
+    // 累计收益和平均收益
+    result.total_profit = filtered_pairs.iter()
+        .map(|p| p.profit_ratio)
+        .sum::<f64>()
+        .round_to(2);
+    result.avg_profit_per_trade = (result.total_profit / result.trade_count as f64).round_to(2);
 
-    // 计算盈亏平衡点
-    let returns_vec: Vec<f64> = returns.into_no_null_iter().collect();
-    p.insert("盈亏平衡点".to_string(), cal_break_even_point(&returns_vec).round());
-
-    // 计算累计收益和单笔收益
-    let total_return: f64 = returns.sum().unwrap_or(0.0);
-    p.insert("累计收益".to_string(), (total_return * 100.0).round() / 100.0); // 保留两位小数
-    p.insert("单笔收益".to_string(), (total_return / n * 100.0).round() / 100.0);
-
-    // 计算平均持仓天数和K线数
-    let avg_hold_days = hold_days.sum().unwrap_or(0.0) / n;
-    let avg_hold_bars = hold_bars.sum().unwrap_or(0.0) / n;
-    p.insert("持仓天数".to_string(), (avg_hold_days * 100.0).round() / 100.0);
-    p.insert("持仓K线数".to_string(), (avg_hold_bars * 100.0).round() / 100.0);
+    // 平均持仓天数和K线数
+    result.avg_days_held = filtered_pairs.iter()
+        .map(|p| p.holding_days)
+        .sum::<i64>() as f64 / result.trade_count as f64;
+    result.avg_bars_held = filtered_pairs.iter()
+        .map(|p| p.holding_days as f64)
+        .sum::<f64>() / result.trade_count as f64;
 
     // 分离盈利和亏损交易
-    let x = returns.into_iter();
-    let win_trades: Vec<f64> = returns.into_iter()
-        .filter_map(|x| x.and_then(|v| 
-            if v >= 0.0 { Some(v) } else { None }))
-        .collect();
-    let loss_trades: Vec<f64> = returns.into_iter()
-        .filter_map(|x| x.and_then(|v| 
-            if v < 0.0 { Some(v) } else { None }))
-        .collect();
+    let (win_trades, loss_trades): (Vec<&TradePair>, Vec<&TradePair>) = filtered_pairs.iter()
+        .partition(|p| p.profit_ratio >= 0.0);
 
-    let win_count = win_trades.len() as f64;
-    let loss_count = loss_trades.len() as f64;
-
-    if win_count > 0.0 {
-        let win_total: f64 = win_trades.iter().sum();
-        let avg_win = win_total / win_count;
-
-        p.insert("盈利次数".to_string(), win_count);
-        p.insert("累计盈利".to_string(), win_total);
-        p.insert("单笔盈利".to_string(), (avg_win * 10000.0).round() / 10000.0); // 保留4位小数
-        p.insert("交易胜率".to_string(), (win_count / n * 10000.0).round() / 10000.0);
+    // 计算盈利相关指标
+    if !win_trades.is_empty() {
+        result.win_count = win_trades.len();
+        result.total_win_profit = win_trades.iter()
+            .map(|p| p.profit_ratio)
+            .sum::<f64>();
+        result.avg_win_profit = (result.total_win_profit / result.win_count as f64).round_to(4);
+        result.win_rate = (result.win_count as f64 / result.trade_count as f64).round_to(4);
     }
 
-    if loss_count > 0.0 {
-        let loss_total: f64 = loss_trades.iter().sum();
-        let avg_loss = loss_total / loss_count;
-
-        p.insert("亏损次数".to_string(), loss_count);
-        p.insert("累计亏损".to_string(), loss_total);
-        p.insert("单笔亏损".to_string(), (avg_loss * 10000.0).round() / 10000.0);
+    // 计算亏损相关指标
+    if !loss_trades.is_empty() {
+        result.loss_count = loss_trades.len();
+        result.total_loss = loss_trades.iter()
+            .map(|p| p.profit_ratio)
+            .sum::<f64>();
+        result.avg_loss = (result.total_loss / result.loss_count as f64).round_to(4);
 
         // 计算盈亏比
-        if let (Some(&win_total), Some(&loss_total)) = (p.get("累计盈利"), p.get("累计亏损")) {
-            let total_ratio = win_total / loss_total.abs();
-            let per_trade_ratio = if let (Some(avg_win), Some(avg_loss)) = (p.get("单笔盈利"), p.get("单笔亏损")) {
-                avg_win / avg_loss.abs()
-            } else {
-                0.0
-            };
-
-            p.insert("累计盈亏比".to_string(), (total_ratio * 10000.0).round() / 10000.0);
-            p.insert("单笔盈亏比".to_string(), (per_trade_ratio * 10000.0).round() / 10000.0);
+        if result.total_loss != 0.0 {
+            result.total_profit_loss_ratio = (result.total_win_profit / result.total_loss.abs()).round_to(4);
+        }
+        if result.avg_loss != 0.0 {
+            result.avg_profit_loss_ratio = (result.avg_win_profit / result.avg_loss.abs()).round_to(4);
         }
     }
 
-    p
+    Ok(result)
 }
 
 // 采用单利计算日收益数据的各项指标
