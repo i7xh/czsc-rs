@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use anyhow::Context; // 引入 Context trait
 use polars::prelude::*;
 use polars::prelude::RoundMode::HalfAwayFromZero;
+use indicatif::{ProgressBar, ProgressStyle};
 use crate::analyzer::PortfolioAnalyzer;
 use crate::processor::MetricProcessor;
 use crate::errors::CzscResult;
@@ -76,17 +77,28 @@ impl BacktestEngine {
 
     fn run_sequential(&self) -> CzscResult<HashMap<String, SymbolResult>> {
 
-        let mut results: HashMap<String, SymbolResult> = HashMap::new();
+        let pb = ProgressBar::new(self.symbols.len() as u64);
+        pb.set_style(ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+            .unwrap()
+            .progress_chars("##-"));
 
-        for symbol in self.symbols.iter() {
+        let mut results = HashMap::new();
+
+        for symbol in &self.symbols {
             let sr = self.process_symbol(symbol)?;
             results.insert(symbol.clone(), sr);
+            pb.inc(1); // 更新进度条
+            pb.set_message(symbol.clone());
         }
+
+        pb.finish_with_message("完成");
         Ok(results)
     }
 
     fn run_parallel(&self) -> CzscResult<HashMap<String, SymbolResult>> {
-        unimplemented!() }
+        unimplemented!()
+    }
 
     fn process_symbol(
         &self,
