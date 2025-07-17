@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         0.0002,           // fee_rate
         "ts".to_string(), // weight_type
         252,              // yearly_days
-        1,                // n_jobs
+        4,                // n_jobs
     )?;
 
     let engine = BacktestEngine::new(df, config.clone())?;
