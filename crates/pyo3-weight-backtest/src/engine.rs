@@ -4,7 +4,6 @@ use anyhow::Context; // 引入 Context trait
 use polars::prelude::*;
 use polars::prelude::RoundMode::HalfAwayFromZero;
 use indicatif::{ProgressBar, ProgressStyle};
-use rayon::iter::IntoParallelRefIterator;
 use crate::analyzer::PortfolioAnalyzer;
 use crate::processor::MetricProcessor;
 use crate::errors::CzscResult;
@@ -18,7 +17,12 @@ pub struct BacktestEngine {
     df: DataFrame,
     symbols: Vec<String>,
     processor: MetricProcessor,
-    analyzer: PortfolioAnalyzer,
+}
+
+pub struct BacktestResult {
+    pub symbol_results: HashMap<String, SymbolResult>,
+    pub portfolio_metrics: HashMap<String, f64>,
+    pub daily_ew_return_df: DataFrame,
 }
 
 impl BacktestEngine {
@@ -56,12 +60,11 @@ impl BacktestEngine {
         
 
         let processor = MetricProcessor::new(config.clone());
-        let analyzer = PortfolioAnalyzer::new(config.clone());
 
-        Ok(Self { config, df: prepared_df, symbols, processor, analyzer})
+        Ok(Self { config, df: prepared_df, symbols, processor })
     }
 
-    pub fn run_backtest(&self) -> CzscResult<()> {
+    pub fn run_backtest(&self) -> CzscResult<(BacktestResult)> {
 
         let symbol_results = if self.config.n_jobs > 1 {
             // 多线程处理
@@ -70,11 +73,21 @@ impl BacktestEngine {
             // 单线程处理
             self.run_sequential()?
         };
-        
+
+        let daily_df = PortfolioAnalyzer::gen_daily_metric_df(&symbol_results);
+        let daily_ew_return_df = PortfolioAnalyzer::gen_daily_ew_return_df(self.config.weight_type, &symbol_results, &daily_df)?;
+
         // 计算组合指标
-        self.analyzer.analyze_portfolio_metrics(&self.df, &symbol_results)?;
-        
-        unimplemented!()
+        let analyzer = PortfolioAnalyzer::new(self.config.clone(), &symbol_results, &self.df, &daily_df, &daily_ew_return_df);
+
+        let metrics =  analyzer.analyze_portfolio_metrics()?;
+
+        let r = BacktestResult{
+            symbol_results,
+            portfolio_metrics: metrics,
+            daily_ew_return_df: daily_ew_return_df,
+        };
+        Ok(r)
     }
 
     fn run_sequential(&self) -> CzscResult<HashMap<String, SymbolResult>> {

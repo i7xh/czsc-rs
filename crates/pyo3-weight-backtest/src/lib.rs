@@ -8,6 +8,7 @@ pub mod config;
 mod stats;
 mod analyzer;
 mod constants;
+mod portfolio_builder;
 
 use crate::types::TradePair;
 use polars::prelude::*;

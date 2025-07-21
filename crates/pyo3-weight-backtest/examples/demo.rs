@@ -23,7 +23,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let engine = BacktestEngine::new(df, config.clone())?;
     println!("engine: {:?}", engine);
     let r = engine.run_backtest();
-    println!("run result: {:?}", r);
     // let daily_result = weight_backtest_pyo3::data_processing::calc_daily_results(df.clone(), "ZZUR9001", &config)?.collect()?;    // 应用函数
     // let shifted = engine::data_processing::gen_trade_pairs(df, "ZZUR9001", &config)?;
 

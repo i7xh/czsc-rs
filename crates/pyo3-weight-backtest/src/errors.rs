@@ -4,6 +4,7 @@ use rayon::ThreadPoolBuildError;
 use std::io;
 use anyhow::anyhow;
 use thiserror::Error;
+use crate::config::WeightType;
 
 #[derive(Error, Debug)]
 pub enum CzscError {
@@ -46,7 +47,12 @@ pub enum CzscError {
     #[error("通用错误: {0}")]
     Anyhow(#[from] anyhow::Error),
 
-    /// 未知错误
+    #[error("Invalid weight type: {0:?}")]
+    InvalidWeightType(WeightType),
+
+    #[error("Column not found: {0}")]
+    ColumnNotFound(String),
+
     #[error("未知错误: {0}")]
     Unknown(String),
 }
@@ -100,6 +106,12 @@ where
                 CzscError::Rayon(e) => CzscError::Rayon(e),
                 CzscError::Anyhow(e) => anyhow!("{}: {}", context, e).into(),
                 CzscError::Unknown(msg) => { CzscError::Unknown(format!("{}: {}", context, msg)) }
+                CzscError::InvalidWeightType(weight_type) => {
+                    CzscError::InvalidWeightType(weight_type)
+                }
+                CzscError::ColumnNotFound(col) => {
+                    CzscError::ColumnNotFound(format!("{}: {}", context, col))
+                }
             }
         })
     }

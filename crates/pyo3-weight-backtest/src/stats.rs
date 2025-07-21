@@ -55,6 +55,8 @@ pub fn evaluate_pairs(pairs: &[TradePair], direction: Direction) -> CzscResult<T
         return Ok(result);
     }
 
+    // 设置交易方向
+    result.trade_direction = direction.to_string();
     // 计算基本统计
     result.trade_count = filtered_pairs.len();
 
