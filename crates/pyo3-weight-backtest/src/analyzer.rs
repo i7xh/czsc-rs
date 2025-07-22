@@ -1,19 +1,22 @@
-use polars::prelude::*;
-use std::collections::HashMap;
-use polars_ops::pivot::pivot;
 use crate::config::{BacktestConfig, WeightType};
 use crate::errors::{CzscError, CzscResult};
 use crate::portfolio_builder::PortfolioMetricsBuilder;
 use crate::types::{DailyMetric, SymbolResult};
+use polars::prelude::*;
+use polars_ops::pivot::pivot;
+use std::collections::HashMap;
 
-enum AggType { Mean, Sum }
+enum AggType {
+    Mean,
+    Sum,
+}
 
 #[derive(Debug, Clone)]
 pub struct PortfolioAnalyzer<'a> {
-    config: BacktestConfig,
-    symbol_results: &'a HashMap<String, SymbolResult>,
-    df: &'a DataFrame,
-    daily_df: &'a DataFrame,
+    config            : BacktestConfig,
+    symbol_results    : &'a HashMap<String, SymbolResult>,
+    df                : &'a DataFrame,
+    daily_df          : &'a DataFrame,
     daily_ew_return_df: &'a DataFrame,
 }
 
@@ -25,7 +28,13 @@ impl<'a> PortfolioAnalyzer<'a> {
         daily_df: &'a DataFrame,
         daily_ew_return_df: &'a DataFrame,
     ) -> Self {
-        PortfolioAnalyzer { config , symbol_results, df, daily_df: &daily_df, daily_ew_return_df: &daily_ew_return_df }
+        PortfolioAnalyzer {
+            config,
+            symbol_results,
+            df,
+            daily_df: &daily_df,
+            daily_ew_return_df: &daily_ew_return_df,
+        }
     }
 
     fn to_daily_dateframe(metrics: &[&DailyMetric]) -> CzscResult<DataFrame> {
@@ -82,19 +91,14 @@ impl<'a> PortfolioAnalyzer<'a> {
         ]?)
     }
     pub fn gen_daily_metric_df(symbol_results: &HashMap<String, SymbolResult>) -> DataFrame {
-        let all_daily_metrics: Vec<&DailyMetric> = symbol_results
-            .values()
-            .flat_map(|r| &r.daily_metrics)
-            .collect();
+        let all_daily_metrics: Vec<&DailyMetric> =
+            symbol_results.values().flat_map(|r| &r.daily_metrics).collect();
         Self::to_daily_dateframe(&all_daily_metrics).unwrap()
     }
 
-    fn add_agg_column(lf: LazyFrame, symbols: &[&str], agg_type: AggType, ) -> CzscResult<LazyFrame> {
-        let agg_expr = symbols
-            .iter()
-            .map(|&s| col(s))
-            .reduce(|acc, col| acc + col)
-            .unwrap_or(lit(0.0));
+    fn add_agg_column(lf: LazyFrame, symbols: &[&str], agg_type: AggType) -> CzscResult<LazyFrame> {
+        let agg_expr =
+            symbols.iter().map(|&s| col(s)).reduce(|acc, col| acc + col).unwrap_or(lit(0.0));
 
         let expr = match agg_type {
             AggType::Mean => (agg_expr / lit(symbols.len() as f64)).alias("total"),
@@ -103,7 +107,11 @@ impl<'a> PortfolioAnalyzer<'a> {
         Ok(lf.with_columns([expr]))
     }
 
-    pub fn gen_daily_ew_return_df(weight_type: WeightType, symbol_results: &HashMap<String, SymbolResult>, daily_df: &DataFrame) -> CzscResult<DataFrame> {
+    pub fn gen_daily_ew_return_df(
+        weight_type: WeightType,
+        symbol_results: &HashMap<String, SymbolResult>,
+        daily_df: &DataFrame,
+    ) -> CzscResult<DataFrame> {
         let dret_df = pivot(
             daily_df,
             ["symbol"],
@@ -113,34 +121,42 @@ impl<'a> PortfolioAnalyzer<'a> {
             None,
             None,
         )?
-            .fill_null(FillNullStrategy::Zero)?;
+        .fill_null(FillNullStrategy::Zero)?;
 
         let symbols = symbol_results.keys().map(|s| s.as_str()).collect::<Vec<&str>>();
 
         let dret_lf = match weight_type {
-            WeightType::TimeSeries => Self::add_agg_column(dret_df.lazy(), &symbols, AggType::Mean)?,
-            WeightType::CrossSection => Self::add_agg_column(dret_df.lazy(), &symbols, AggType::Sum)?,
+            WeightType::TimeSeries => {
+                Self::add_agg_column(dret_df.lazy(), &symbols, AggType::Mean)?
+            }
+            WeightType::CrossSection => {
+                Self::add_agg_column(dret_df.lazy(), &symbols, AggType::Sum)?
+            }
             _ => return Err(CzscError::InvalidWeightType(weight_type).into()),
         };
 
-        Ok(dret_lf.select(&[
+        Ok(dret_lf
+            .select(&[
                 col("date"),
-                all().exclude(["date"]).round(4, RoundMode::HalfAwayFromZero)
+                all().exclude(["date"]).round(4, RoundMode::HalfAwayFromZero),
             ])
             .with_row_index("idx", Some(0))
             .collect()?)
     }
     pub fn analyze_portfolio_metrics(&self) -> CzscResult<HashMap<String, f64>> {
-
         let metrics = PortfolioMetricsBuilder::new(
-            &self.config, &self.df, &self.daily_df, &self.daily_ew_return_df, self.symbol_results)
-            .add_basic_metrics()?
-            .add_trade_pair_metrics()?
-            .add_long_short_metrics()?
-            .add_benchmark_correlations()?
-            .add_portfolio_return_metrics()?
-            .build();
+            &self.config,
+            &self.df,
+            &self.daily_df,
+            &self.daily_ew_return_df,
+            self.symbol_results,
+        )
+        .add_basic_metrics()?
+        .add_trade_pair_metrics()?
+        .add_long_short_metrics()?
+        .add_benchmark_correlations()?
+        .add_portfolio_return_metrics()?
+        .build();
         Ok(metrics)
     }
-
 }

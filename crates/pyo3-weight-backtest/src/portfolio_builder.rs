@@ -1,38 +1,27 @@
+use crate::config::BacktestConfig;
+use crate::errors::CzscResult;
+use crate::stats::{daily_performance, evaluate_pairs};
+use crate::types::{Direction, SymbolResult, TradePair};
+use crate::utils::RoundTo;
 use polars::prelude::*;
 use std::collections::HashMap;
-use crate::config::{BacktestConfig, WeightType};
-use crate::types::{SymbolResult, DailyMetric, TradePair, Direction};
-use crate::stats::{evaluate_pairs, daily_performance};
-use crate::errors::{CzscError, CzscResult};
-use crate::utils::RoundTo;
 
-
-// 交易对统计结果结构
-#[derive(Debug, Default)]
-pub struct TradePairsStats {
-    pub avg_profit_per_trade: f64,
-    pub avg_bars_held: f64,
-    pub win_rate: f64,
-    pub avg_days_held: f64,
-}
-
-// 相关性计算结果
 #[derive(Debug, Default)]
 pub struct CorrelationStats {
-    pub volatility_ratio: f64,
-    pub volatility_correlation: f64,
-    pub return_correlation: f64,
-    pub downside_correlation: f64,
+    pub volatility_ratio       : f64,
+    pub volatility_correlation : f64,
+    pub return_correlation     : f64,
+    pub downside_correlation   : f64,
 }
 
 // 构建器结构
 pub struct PortfolioMetricsBuilder<'a> {
-    config: &'a BacktestConfig,
-    symbol_results: &'a HashMap<String, SymbolResult>,
-    df: &'a DataFrame,
-    daily_df: &'a DataFrame,
+    config            : &'a BacktestConfig,
+    symbol_results    : &'a HashMap<String, SymbolResult>,
+    df                : &'a DataFrame,
+    daily_df          : &'a DataFrame,
     daily_ew_return_df: &'a DataFrame,
-    stats: HashMap<String, f64>,
+    stats             : HashMap<String, f64>,
 }
 
 impl<'a> PortfolioMetricsBuilder<'a> {
@@ -73,7 +62,8 @@ impl<'a> PortfolioMetricsBuilder<'a> {
 
     /// 添加交易对统计指标
     pub fn add_trade_pair_metrics(mut self) -> CzscResult<Self> {
-        let trade_pairs: Vec<TradePair> = self.symbol_results
+        let trade_pairs: Vec<TradePair> = self
+            .symbol_results
             .values()
             .flat_map(|sr| sr.trade_pairs.iter().cloned())
             .collect();
@@ -103,21 +93,30 @@ impl<'a> PortfolioMetricsBuilder<'a> {
         let alpha_df = self.get_alpha_df()?;
         let corr_stats = self.calculate_correlations(&alpha_df)?;
 
-        self.stats.insert("波动比".to_string(), corr_stats.volatility_ratio.round_to(4));
-        self.stats.insert("与基准波动相关性".to_string(), corr_stats.volatility_correlation);
-        self.stats.insert("与基准收益相关性".to_string(), corr_stats.return_correlation);
-        self.stats.insert("与基准空头相关性".to_string(), corr_stats.downside_correlation);
+        self.stats.insert(
+            "波动比".to_string(),
+            corr_stats.volatility_ratio.round_to(4),
+        );
+        self.stats.insert(
+            "与基准波动相关性".to_string(),
+            corr_stats.volatility_correlation,
+        );
+        self.stats.insert(
+            "与基准收益相关性".to_string(),
+            corr_stats.return_correlation,
+        );
+        self.stats.insert(
+            "与基准空头相关性".to_string(),
+            corr_stats.downside_correlation,
+        );
 
         Ok(self)
     }
 
     /// 添加组合收益指标
     pub fn add_portfolio_return_metrics(mut self) -> CzscResult<Self> {
-        let returns: Vec<f64> = self.daily_ew_return_df.column("total")?
-            .f64()?
-            .into_iter()
-            .flatten()
-            .collect();
+        let returns: Vec<f64> =
+            self.daily_ew_return_df.column("total")?.f64()?.into_iter().flatten().collect();
 
         let perf_stats = daily_performance(&returns, Some(self.config.yearly_days as f64));
 
@@ -139,7 +138,8 @@ impl<'a> PortfolioMetricsBuilder<'a> {
         }
 
         // 使用表达式计算
-        let df = self.df
+        let df = self
+            .df
             .clone()
             .lazy()
             .select([
@@ -186,20 +186,19 @@ impl<'a> PortfolioMetricsBuilder<'a> {
             ])
             .collect()?;
 
-        let volatility_correlation = corr_df.column("vol_corr")?
-            .f64()?
-            .get(0)
-            .unwrap_or(f64::NAN)
-            .round_to(4);
+        let volatility_correlation =
+            corr_df.column("vol_corr")?.f64()?.get(0).unwrap_or(f64::NAN).round_to(4);
 
-        let return_correlation = corr_df.column("return_corr")?
+        let return_correlation = corr_df
+            .column("return_corr")?
             .f64()?
             .get(0)
             .unwrap_or(f64::NAN)
             .abs()
             .round_to(4);
 
-        let downside_correlation = alpha_df.clone()
+        let downside_correlation = alpha_df
+            .clone()
             .lazy()
             .filter(col("基准").lt(0.0))
             .select([pearson_corr(col("策略"), col("基准")).alias("down_corr")])
@@ -219,9 +218,9 @@ impl<'a> PortfolioMetricsBuilder<'a> {
     }
 
     fn get_alpha_df(&self) -> CzscResult<DataFrame> {
-
         // 分组聚合计算平均值
-        let grouped = self.daily_df
+        let grouped = self
+            .daily_df
             .clone()
             .lazy()
             .group_by([col("date")])
@@ -235,12 +234,7 @@ impl<'a> PortfolioMetricsBuilder<'a> {
         let result = grouped
             .lazy()
             .with_columns([(col("策略") - col("基准")).alias("超额")])
-            .select(&[
-                col("date"),
-                col("策略"),
-                col("基准"),
-                col("超额"),
-            ])
+            .select(&[col("date"), col("策略"), col("基准"), col("超额")])
             .collect()?;
 
         Ok(result)

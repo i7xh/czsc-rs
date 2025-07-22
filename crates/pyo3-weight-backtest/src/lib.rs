@@ -1,21 +1,21 @@
+mod analyzer;
+pub mod config;
+mod constants;
 pub mod engine;
 mod errors;
+mod portfolio_builder;
+mod processor;
+mod stats;
+mod trade_position;
 mod types;
 pub mod utils;
-mod trade_position;
-mod processor;
-pub mod config;
-mod stats;
-mod analyzer;
-mod constants;
-mod portfolio_builder;
 
+use crate::config::BacktestConfig;
+use crate::engine::BacktestEngine;
 use crate::types::TradePair;
 use polars::prelude::*;
 use pyo3::prelude::*;
 use pyo3_polars::PyDataFrame;
-use crate::config::BacktestConfig;
-use crate::engine::BacktestEngine;
 
 #[pyclass]
 pub struct WeightBacktest {
@@ -50,7 +50,6 @@ impl WeightBacktest {
         let _ = engine.run_backtest()?;
         unimplemented!()
     }
-
 }
 
 #[pymodule]

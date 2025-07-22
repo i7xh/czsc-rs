@@ -16,11 +16,7 @@ pub fn validate_dataframe(df: &DataFrame) -> CzscResult<()> {
         return Err(Validation("DataFrame is empty".to_string()));
     }
 
-    let total_nulls = df
-        .get_columns()
-        .iter()
-        .map(|s| s.null_count())
-        .sum::<usize>();
+    let total_nulls = df.get_columns().iter().map(|s| s.null_count()).sum::<usize>();
     if total_nulls > 0 {
         return Err(Validation("DataFrame contains null values".to_string()));
     }
@@ -48,9 +44,7 @@ pub fn standard_deviation(data: &[f64]) -> f64 {
     let n = data.len() as f64;
     let mean = data.iter().sum::<f64>() / n;
 
-    let variance = data.iter()
-        .map(|x| (x - mean).powi(2))
-        .sum::<f64>() / n;
+    let variance = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
 
     variance.sqrt()
 }

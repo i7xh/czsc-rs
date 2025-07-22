@@ -1,10 +1,11 @@
-use std::fmt::Debug;
 use chrono::NaiveDate;
 use polars::prelude::*;
-
+use std::fmt::Debug;
 
 fn sort_dataframe(df: &DataFrame) -> PolarsResult<DataFrame> {
-    Ok(df.clone().lazy()
+    Ok(df
+        .clone()
+        .lazy()
         .sort(
             ["date"],
             SortMultipleOptions {
@@ -20,7 +21,8 @@ fn main() {
     let df = df![
         "date" => &["2023-01-15", "2023-01-10", "2017-01-20", "2023-01-05"],
         "value" => &[10.5, 20.3, 15.2, 5.7]
-    ].unwrap();
+    ]
+    .unwrap();
 
     println!("原始 DataFrame:\n{}", df);
 
@@ -31,12 +33,14 @@ fn main() {
         ..Default::default()             // 其他参数使用默认值
     };
 
-    let df = df.lazy().with_columns([
-        col("date")
+    let df = df
+        .lazy()
+        .with_columns([col("date")
             .str()
             .to_date(options) // 将字符串转换为日期
-            .alias("date")
-    ]).collect().unwrap();
+            .alias("date")])
+        .collect()
+        .unwrap();
 
     // 从 DataFrame 获取 DateChunked
     let date_ca = df.column("date").unwrap().date().unwrap();
@@ -55,10 +59,14 @@ fn main() {
 
     println!("转换后的 DataFrame:\n{}", df);
 
-    let xx = df.lazy().select(&[
-        col("date").max().alias("max_date"),
-        col("date").min().alias("min_date"),
-    ]).collect().unwrap();
+    let xx = df
+        .lazy()
+        .select(&[
+            col("date").max().alias("max_date"),
+            col("date").min().alias("min_date"),
+        ])
+        .collect()
+        .unwrap();
 
     println!("最大日期和最小日期:\n{}", xx);
 

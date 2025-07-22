@@ -1,10 +1,10 @@
+use crate::config::WeightType;
+use anyhow::anyhow;
 use polars::error::PolarsError;
 use pyo3::PyErr;
 use rayon::ThreadPoolBuildError;
 use std::io;
-use anyhow::anyhow;
 use thiserror::Error;
-use crate::config::WeightType;
 
 #[derive(Error, Debug)]
 pub enum CzscError {
@@ -95,17 +95,31 @@ where
         self.map_err(|e| {
             let base_err: CzscError = e.into();
             match base_err {
-                CzscError::Validation(msg) => { CzscError::Validation(format!("{}: {}", context, msg)) }
-                CzscError::DataProcessing(msg) => { CzscError::DataProcessing(format!("{}: {}", context, msg)) }
-                CzscError::BacktestLogic(msg) => { CzscError::BacktestLogic(format!("{}: {}", context, msg)) }
-                CzscError::Performance(msg) => { CzscError::Performance(format!("{}: {}", context, msg)) }
-                CzscError::PythonInteraction(msg) => { CzscError::PythonInteraction(format!("{}: {}", context, msg)) }
-                CzscError::Io(e) => { CzscError::Io(io::Error::new(e.kind(), format!("{}: {}", context, e))) }
-                CzscError::Serialization(msg) => { CzscError::Serialization(format!("{}: {}", context, msg)) }
+                CzscError::Validation(msg) => {
+                    CzscError::Validation(format!("{}: {}", context, msg))
+                }
+                CzscError::DataProcessing(msg) => {
+                    CzscError::DataProcessing(format!("{}: {}", context, msg))
+                }
+                CzscError::BacktestLogic(msg) => {
+                    CzscError::BacktestLogic(format!("{}: {}", context, msg))
+                }
+                CzscError::Performance(msg) => {
+                    CzscError::Performance(format!("{}: {}", context, msg))
+                }
+                CzscError::PythonInteraction(msg) => {
+                    CzscError::PythonInteraction(format!("{}: {}", context, msg))
+                }
+                CzscError::Io(e) => {
+                    CzscError::Io(io::Error::new(e.kind(), format!("{}: {}", context, e)))
+                }
+                CzscError::Serialization(msg) => {
+                    CzscError::Serialization(format!("{}: {}", context, msg))
+                }
                 CzscError::Polars(e) => CzscError::Polars(e),
                 CzscError::Rayon(e) => CzscError::Rayon(e),
                 CzscError::Anyhow(e) => anyhow!("{}: {}", context, e).into(),
-                CzscError::Unknown(msg) => { CzscError::Unknown(format!("{}: {}", context, msg)) }
+                CzscError::Unknown(msg) => CzscError::Unknown(format!("{}: {}", context, msg)),
                 CzscError::InvalidWeightType(weight_type) => {
                     CzscError::InvalidWeightType(weight_type)
                 }

@@ -1,9 +1,9 @@
-use polars::prelude::*;
-use std::collections::HashMap;
-use pyo3::impl_::wrap::SomeWrap;
 use crate::errors::CzscResult;
 use crate::types::{Direction, TradeEvaluation, TradePair};
 use crate::utils::RoundTo;
+use polars::prelude::*;
+use pyo3::impl_::wrap::SomeWrap;
+use std::collections::HashMap;
 
 // 计算盈亏平衡点的辅助函数
 fn cal_break_even_point(seq: &[f64]) -> f64 {
@@ -35,14 +35,11 @@ fn cal_break_even_point(seq: &[f64]) -> f64 {
 
 // 评估交易记录
 pub fn evaluate_pairs(pairs: &[TradePair], direction: Direction) -> CzscResult<TradeEvaluation> {
-
     // 筛选指定方向的交易
     let filtered_pairs: Vec<&TradePair> = if direction == Direction::LongShort {
         pairs.iter().collect()
     } else {
-        pairs.iter()
-            .filter(|p| p.direction == direction)
-            .collect()
+        pairs.iter().filter(|p| p.direction == direction).collect()
     };
 
     let mut result = TradeEvaluation {
@@ -61,36 +58,27 @@ pub fn evaluate_pairs(pairs: &[TradePair], direction: Direction) -> CzscResult<T
     result.trade_count = filtered_pairs.len();
 
     // 盈亏平衡点
-    let profit_ratios: Vec<f64> = filtered_pairs.iter()
-        .map(|p| p.profit_ratio)
-        .collect();
+    let profit_ratios: Vec<f64> = filtered_pairs.iter().map(|p| p.profit_ratio).collect();
     result.break_even_point = cal_break_even_point(&profit_ratios).round_to(4);
 
     // 累计收益和平均收益
-    result.total_profit = filtered_pairs.iter()
-        .map(|p| p.profit_ratio)
-        .sum::<f64>()
-        .round_to(2);
+    result.total_profit = filtered_pairs.iter().map(|p| p.profit_ratio).sum::<f64>().round_to(2);
     result.avg_profit_per_trade = (result.total_profit / result.trade_count as f64).round_to(2);
 
     // 平均持仓天数和K线数
-    result.avg_days_held = filtered_pairs.iter()
-        .map(|p| p.holding_days)
-        .sum::<i64>() as f64 / result.trade_count as f64;
-    result.avg_bars_held = filtered_pairs.iter()
-        .map(|p| p.holding_days as f64)
-        .sum::<f64>() / result.trade_count as f64;
+    result.avg_days_held = filtered_pairs.iter().map(|p| p.holding_days).sum::<i64>() as f64
+        / result.trade_count as f64;
+    result.avg_bars_held = filtered_pairs.iter().map(|p| p.holding_days as f64).sum::<f64>()
+        / result.trade_count as f64;
 
     // 分离盈利和亏损交易
-    let (win_trades, loss_trades): (Vec<&TradePair>, Vec<&TradePair>) = filtered_pairs.iter()
-        .partition(|p| p.profit_ratio >= 0.0);
+    let (win_trades, loss_trades): (Vec<&TradePair>, Vec<&TradePair>) =
+        filtered_pairs.iter().partition(|p| p.profit_ratio >= 0.0);
 
     // 计算盈利相关指标
     if !win_trades.is_empty() {
         result.win_count = win_trades.len();
-        result.total_win_profit = win_trades.iter()
-            .map(|p| p.profit_ratio)
-            .sum::<f64>();
+        result.total_win_profit = win_trades.iter().map(|p| p.profit_ratio).sum::<f64>();
         result.avg_win_profit = (result.total_win_profit / result.win_count as f64).round_to(4);
         result.win_rate = (result.win_count as f64 / result.trade_count as f64).round_to(4);
     }
@@ -98,17 +86,17 @@ pub fn evaluate_pairs(pairs: &[TradePair], direction: Direction) -> CzscResult<T
     // 计算亏损相关指标
     if !loss_trades.is_empty() {
         result.loss_count = loss_trades.len();
-        result.total_loss = loss_trades.iter()
-            .map(|p| p.profit_ratio)
-            .sum::<f64>();
+        result.total_loss = loss_trades.iter().map(|p| p.profit_ratio).sum::<f64>();
         result.avg_loss = (result.total_loss / result.loss_count as f64).round_to(4);
 
         // 计算盈亏比
         if result.total_loss != 0.0 {
-            result.total_profit_loss_ratio = (result.total_win_profit / result.total_loss.abs()).round_to(4);
+            result.total_profit_loss_ratio =
+                (result.total_win_profit / result.total_loss.abs()).round_to(4);
         }
         if result.avg_loss != 0.0 {
-            result.avg_profit_loss_ratio = (result.avg_win_profit / result.avg_loss.abs()).round_to(4);
+            result.avg_profit_loss_ratio =
+                (result.avg_win_profit / result.avg_loss.abs()).round_to(4);
         }
     }
 
@@ -145,9 +133,7 @@ pub fn daily_performance(daily_returns: &[f64], yearly_days: Option<f64>) -> Has
     let n = daily_returns.len() as f64;
     let sum_return: f64 = daily_returns.iter().sum();
     let mean_return = sum_return / n;
-    let variance: f64 = daily_returns.iter()
-        .map(|x| (x - mean_return).powi(2))
-        .sum::<f64>() / n;
+    let variance: f64 = daily_returns.iter().map(|x| (x - mean_return).powi(2)).sum::<f64>() / n;
     let std_dev = variance.sqrt();
 
     // 检查无效数据
@@ -202,15 +188,9 @@ pub fn daily_performance(daily_returns: &[f64], yearly_days: Option<f64>) -> Has
     let high_pct = new_high_count as f64 / n;
 
     // 计算盈利/亏损交易
-    let win_returns: Vec<f64> = daily_returns.iter()
-        .filter(|&&x| x >= 0.0)
-        .copied()
-        .collect();
+    let win_returns: Vec<f64> = daily_returns.iter().filter(|&&x| x >= 0.0).copied().collect();
 
-    let loss_returns: Vec<f64> = daily_returns.iter()
-        .filter(|&&x| x < 0.0)
-        .copied()
-        .collect();
+    let loss_returns: Vec<f64> = daily_returns.iter().filter(|&&x| x < 0.0).copied().collect();
 
     let win_count = win_returns.len() as f64;
     let loss_count = loss_returns.len() as f64;
@@ -241,17 +221,15 @@ pub fn daily_performance(daily_returns: &[f64], yearly_days: Option<f64>) -> Has
     // 计算波动率
     let annual_volatility = std_dev * yearly_days.sqrt();
 
-    let downside_returns: Vec<f64> = loss_returns.iter()
-        .map(|x| x.abs())
-        .collect();
+    let downside_returns: Vec<f64> = loss_returns.iter().map(|x| x.abs()).collect();
 
     let downside_std = if downside_returns.is_empty() {
         0.0
     } else {
         let downside_mean = downside_returns.iter().sum::<f64>() / downside_returns.len() as f64;
-        let downside_var: f64 = downside_returns.iter()
-            .map(|x| (x - downside_mean).powi(2))
-            .sum::<f64>() / downside_returns.len() as f64;
+        let downside_var: f64 =
+            downside_returns.iter().map(|x| (x - downside_mean).powi(2)).sum::<f64>()
+                / downside_returns.len() as f64;
         downside_var.sqrt()
     };
 
@@ -277,24 +255,57 @@ pub fn daily_performance(daily_returns: &[f64], yearly_days: Option<f64>) -> Has
     }
 
     // 填充结果
-    metrics.insert("绝对收益".to_string(), (sum_return * 10000.0).round() / 10000.0);
-    metrics.insert("年化".to_string(), (mean_return * yearly_days * 10000.0).round() / 10000.0);
-    metrics.insert("夏普".to_string(), min_max(
-        (mean_return / std_dev) * yearly_days.sqrt(),
-        -5.0, 10.0, 2
-    ));
-    metrics.insert("最大回撤".to_string(), (max_drawdown * 10000.0).round() / 10000.0);
+    metrics.insert(
+        "绝对收益".to_string(),
+        (sum_return * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "年化".to_string(),
+        (mean_return * yearly_days * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "夏普".to_string(),
+        min_max((mean_return / std_dev) * yearly_days.sqrt(), -5.0, 10.0, 2),
+    );
+    metrics.insert(
+        "最大回撤".to_string(),
+        (max_drawdown * 10000.0).round() / 10000.0,
+    );
     metrics.insert("卡玛".to_string(), min_max(kama, -10.0, 20.0, 2));
     metrics.insert("日胜率".to_string(), (win_pct * 10000.0).round() / 10000.0);
-    metrics.insert("日盈亏比".to_string(), (daily_ykb * 10000.0).round() / 10000.0);
-    metrics.insert("日赢面".to_string(), (win_expectation * 10000.0).round() / 10000.0);
-    metrics.insert("年化波动率".to_string(), (annual_volatility * 10000.0).round() / 10000.0);
-    metrics.insert("下行波动率".to_string(), (downside_volatility * 10000.0).round() / 10000.0);
-    metrics.insert("非零覆盖".to_string(), (non_zero_cover * 10000.0).round() / 10000.0);
-    metrics.insert("盈亏平衡点".to_string(), (cal_break_even_point(daily_returns) * 10000.0).round() / 10000.0);
+    metrics.insert(
+        "日盈亏比".to_string(),
+        (daily_ykb * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "日赢面".to_string(),
+        (win_expectation * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "年化波动率".to_string(),
+        (annual_volatility * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "下行波动率".to_string(),
+        (downside_volatility * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "非零覆盖".to_string(),
+        (non_zero_cover * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "盈亏平衡点".to_string(),
+        (cal_break_even_point(daily_returns) * 10000.0).round() / 10000.0,
+    );
     metrics.insert("新高间隔".to_string(), max_interval);
-    metrics.insert("新高占比".to_string(), (high_pct * 10000.0).round() / 10000.0);
-    metrics.insert("回撤风险".to_string(), (max_drawdown / annual_volatility * 10000.0).round() / 10000.0);
+    metrics.insert(
+        "新高占比".to_string(),
+        (high_pct * 10000.0).round() / 10000.0,
+    );
+    metrics.insert(
+        "回撤风险".to_string(),
+        (max_drawdown / annual_volatility * 10000.0).round() / 10000.0,
+    );
 
     metrics
 }

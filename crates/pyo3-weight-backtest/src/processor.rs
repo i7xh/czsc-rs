@@ -1,13 +1,13 @@
-use std::collections::{HashMap, VecDeque};
-use anyhow::anyhow;
-use chrono::{NaiveDate, NaiveDateTime};
 use super::types::*;
-use polars::prelude::*;
 use crate::config::{BacktestConfig, WeightType};
 use crate::errors::CzscResult;
-use crate::stats::{daily_performance};
+use crate::stats::daily_performance;
 use crate::trade_position::TradePositionState;
 use crate::types::TradeAction::{CloseLong, CloseShort, OpenLong, OpenShort};
+use anyhow::anyhow;
+use chrono::{NaiveDate, NaiveDateTime};
+use polars::prelude::*;
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone)]
 pub struct MetricProcessor {
@@ -27,18 +27,15 @@ impl MetricProcessor {
         let fee_rate = self.config.fee_rate;
         // 实现核心指标计算逻辑
         // 使用 Polars 高效计算
-        let df = symbol_df.clone()
+        let df = symbol_df
+            .clone()
             .lazy()
             // 计算基准收益率：n1b = (下一期价格 / 当前价格) - 1
             .with_column(
-                (col("price").shift(Expr::from(-1)) / col("price") - lit(1.0))
-                    .alias("n1b")
+                (col("price").shift(Expr::from(-1)) / col("price") - lit(1.0)).alias("n1b"),
             )
             // 计算策略理论收益：edge = weight * n1b
-            .with_column(
-                (col("weight") * col("n1b"))
-                    .alias("edge")
-            )
+            .with_column((col("weight") * col("n1b")).alias("edge"))
             // 计算换手率：|当期权重 - 上期权重|
             .with_column(
                 (col("weight").shift(Expr::from(1)) - col("weight"))
@@ -47,21 +44,15 @@ impl MetricProcessor {
                     .alias("turnover"),
             )
             // 计算交易成本：cost = turnover * fee_rate
-            .with_column(
-                (col("turnover") * lit(fee_rate))
-                    .alias("cost")
-            )
+            .with_column((col("turnover") * lit(fee_rate)).alias("cost"))
             // 计算净收益：return = edge - cost
-            .with_column(
-                (col("edge") - col("cost"))
-                    .alias("return")
-            )
+            .with_column((col("edge") - col("cost")).alias("return"))
             // 分离多空头寸：weight > 0
             .with_column(
                 when(col("weight").gt(0.0))
                     .then(col("weight"))
                     .otherwise(lit(0.0))
-                    .alias("long_weight")
+                    .alias("long_weight"),
             )
             // 分离空头寸：weight < 0
             .with_column(
@@ -71,13 +62,9 @@ impl MetricProcessor {
                     .alias("short_weight"),
             )
             // 计算多头理论收益
-            .with_column(
-                (col("long_weight") * col("n1b")).alias("long_edge")
-            )
+            .with_column((col("long_weight") * col("n1b")).alias("long_edge"))
             // 计算空头理论收益
-            .with_column(
-                (col("short_weight") * col("n1b")).alias("short_edge"),
-            )
+            .with_column((col("short_weight") * col("n1b")).alias("short_edge"))
             // 计算多头换手率
             .with_column(
                 (col("long_weight").shift(Expr::from(1)) - col("long_weight"))
@@ -93,27 +80,18 @@ impl MetricProcessor {
                     .alias("short_turnover"),
             )
             // 计算多头交易成本
-            .with_column(
-                (col("long_turnover") * lit(fee_rate)).alias("long_cost")
-            )
+            .with_column((col("long_turnover") * lit(fee_rate)).alias("long_cost"))
             // 计算空头交易成本
-            .with_column(
-                (col("short_turnover") * lit(fee_rate)).alias("short_cost"),
-            )
+            .with_column((col("short_turnover") * lit(fee_rate)).alias("short_cost"))
             // 计算多头净收益
-            .with_column(
-                (col("long_edge") - col("long_cost")).alias("long_return")
-            )
+            .with_column((col("long_edge") - col("long_cost")).alias("long_return"))
             // 计算空头净收益
-            .with_column(
-                (col("short_edge") - col("short_cost")).alias("short_return"),
-            )
+            .with_column((col("short_edge") - col("short_cost")).alias("short_return"))
             // 提取日期部分（不含时间）
-            .with_column(
-                col("dt").dt().strftime("%Y-%m-%d").alias("date")
-            );
+            .with_column(col("dt").dt().strftime("%Y-%m-%d").alias("date"));
 
-        let aggregated_df = df.lazy()
+        let aggregated_df = df
+            .lazy()
             .group_by([col("date")])
             .agg([
                 col("edge").sum().alias("edge"),
@@ -145,11 +123,13 @@ impl MetricProcessor {
             let long_edge = aggregated_df.column("long_edge")?.f64()?.get(idx).unwrap_or(0.0);
             let long_cost = aggregated_df.column("long_cost")?.f64()?.get(idx).unwrap_or(0.0);
             let long_return = aggregated_df.column("long_return")?.f64()?.get(idx).unwrap_or(0.0);
-            let long_turnover = aggregated_df.column("long_turnover")?.f64()?.get(idx).unwrap_or(0.0);
+            let long_turnover =
+                aggregated_df.column("long_turnover")?.f64()?.get(idx).unwrap_or(0.0);
             let short_edge = aggregated_df.column("short_edge")?.f64()?.get(idx).unwrap_or(0.0);
             let short_cost = aggregated_df.column("short_cost")?.f64()?.get(idx).unwrap_or(0.0);
             let short_return = aggregated_df.column("short_return")?.f64()?.get(idx).unwrap_or(0.0);
-            let short_turnover = aggregated_df.column("short_turnover")?.f64()?.get(idx).unwrap_or(0.0);
+            let short_turnover =
+                aggregated_df.column("short_turnover")?.f64()?.get(idx).unwrap_or(0.0);
 
             daily_metrics.push(DailyMetric {
                 date: date.parse().unwrap(),
@@ -189,9 +169,7 @@ impl MetricProcessor {
 
         for i in 0..symbol_df.height() {
             let (dt, volume, price, bar_id, weight) = match (
-                dt_series
-                    .get(i)
-                    .and_then(|ts| NaiveDateTime::from_timestamp_nanos(ts)),
+                dt_series.get(i).and_then(|ts| NaiveDateTime::from_timestamp_nanos(ts)),
                 volume_series.get(i),
                 price_series.get(i),
                 bar_id_series.get(i),
@@ -200,8 +178,11 @@ impl MetricProcessor {
                 (Some(dt), Some(volume), Some(price), Some(bar_id), Some(weight)) => {
                     (dt, volume, price, bar_id, weight)
                 }
-                _ =>
-                    return Err(anyhow!("DataFrame contains null values in required columns").into())
+                _ => {
+                    return Err(
+                        anyhow!("DataFrame contains null values in required columns").into(),
+                    )
+                }
             };
             let actions = state.handle_transition(volume, dt, price as f32, bar_id as usize);
             all_actions.extend(actions);
@@ -211,40 +192,24 @@ impl MetricProcessor {
         Ok(trade_pairs)
     }
 
-    fn actions_to_trade_pairs(&self, symbol: &str, actions: Vec<TradeAction>) -> CzscResult<Vec<TradePair>> {
+    fn actions_to_trade_pairs(
+        &self,
+        symbol: &str,
+        actions: Vec<TradeAction>,
+    ) -> CzscResult<Vec<TradePair>> {
         let mut trade_pairs: Vec<TradePair> = vec![];
         let mut open_long_queue: VecDeque<TradeAction> = VecDeque::new();
         let mut open_short_queue: VecDeque<TradeAction> = VecDeque::new();
 
         for action in actions {
             match action {
-                OpenLong {
-                    dt,
-                    price,
-                    bar_id,
-                } => {
-                    open_long_queue.push_back(OpenLong {
-                        dt,
-                        price,
-                        bar_id,
-                    });
+                OpenLong { dt, price, bar_id } => {
+                    open_long_queue.push_back(OpenLong { dt, price, bar_id });
                 }
-                OpenShort {
-                    dt,
-                    price,
-                    bar_id,
-                } => {
-                    open_short_queue.push_back(OpenShort {
-                        dt,
-                        price,
-                        bar_id,
-                    });
+                OpenShort { dt, price, bar_id } => {
+                    open_short_queue.push_back(OpenShort { dt, price, bar_id });
                 }
-                CloseLong {
-                    dt,
-                    price,
-                    bar_id,
-                } => {
+                CloseLong { dt, price, bar_id } => {
                     if let Some(open_action) = open_long_queue.pop_front() {
                         if let OpenLong {
                             dt: open_dt,
@@ -270,14 +235,12 @@ impl MetricProcessor {
                         }
                     } else {
                         // Handle case where there is no open long position
-                        eprintln!("Warning: Attempted to close a long position without an open position.");
+                        eprintln!(
+                            "Warning: Attempted to close a long position without an open position."
+                        );
                     }
                 }
-                CloseShort {
-                    dt,
-                    price,
-                    bar_id,
-                } => {
+                CloseShort { dt, price, bar_id } => {
                     if let Some(open_action) = open_short_queue.pop_front() {
                         if let OpenShort {
                             dt: open_dt,
@@ -310,5 +273,4 @@ impl MetricProcessor {
         }
         Ok(trade_pairs)
     }
-
 }
