@@ -1,13 +1,12 @@
 use super::types::*;
-use crate::config::{BacktestConfig, WeightType};
+use crate::config::BacktestConfig;
 use crate::errors::CzscResult;
-use crate::stats::daily_performance;
 use crate::trade_position::TradePositionState;
 use crate::types::TradeAction::{CloseLong, CloseShort, OpenLong, OpenShort};
 use anyhow::anyhow;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::NaiveDateTime;
 use polars::prelude::*;
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 #[derive(Debug, Clone)]
 pub struct MetricProcessor {
@@ -223,8 +222,8 @@ impl MetricProcessor {
                             trade_pairs.push(TradePair {
                                 symbol: symbol.to_string(), // Symbol should be set appropriately
                                 direction: Direction::Long,
-                                open_dt,
-                                close_dt: dt,
+                                open_dt: open_dt.to_string(),
+                                close_dt: dt.to_string(),
                                 open_price: open_price as f64,
                                 close_price: price as f64,
                                 bar_count,
@@ -254,8 +253,8 @@ impl MetricProcessor {
                             trade_pairs.push(TradePair {
                                 symbol: symbol.to_string(),
                                 direction: Direction::Short,
-                                open_dt,
-                                close_dt: dt,
+                                open_dt: open_dt.to_string(),
+                                close_dt: dt.to_string(),
                                 open_price: open_price as f64,
                                 close_price: price as f64,
                                 bar_count,

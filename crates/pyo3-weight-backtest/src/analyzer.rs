@@ -55,7 +55,7 @@ impl<'a> PortfolioAnalyzer<'a> {
         let mut short_turnovers = Vec::with_capacity(metrics.len());
 
         for metric in metrics {
-            dates.push(metric.date);
+            dates.push(metric.date.clone());
             symbols.push(metric.symbol.clone());
             edges.push(metric.edge);
             returns.push(metric.return_val);

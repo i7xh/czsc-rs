@@ -11,17 +11,15 @@ mod types;
 pub mod utils;
 
 use crate::config::BacktestConfig;
-use crate::engine::BacktestEngine;
-use crate::types::TradePair;
+use crate::engine::{BacktestEngine, BacktestResult};
+use crate::types::{DailyMetric, Direction, SymbolResult, TradePair};
 use polars::prelude::*;
 use pyo3::prelude::*;
 use pyo3_polars::PyDataFrame;
 
 #[pyclass]
 pub struct WeightBacktest {
-    // daily_results: Vec<DailyResult>,
-    trade_pairs: Vec<TradePair>,
-    // performance_stats: PerformanceStats,
+    engine: BacktestEngine,
 }
 
 #[pymethods]
@@ -43,17 +41,24 @@ impl WeightBacktest {
             n_job,
         )?;
 
-        println!("config: {:?}", config);
-        let polar_df: DataFrame = py_df.into();
+        Ok(WeightBacktest {
+            engine: BacktestEngine::new(py_df.into(), config)?
+        })
+    }
 
-        let engine = BacktestEngine::new(polar_df, config)?;
-        let _ = engine.run_backtest()?;
-        unimplemented!()
+    pub fn run_backtest(&self) -> PyResult<BacktestResult> {
+        let result = self.engine.run_backtest()?;
+        Ok(result)
     }
 }
 
 #[pymodule]
 fn weight_backtest_pyo3(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<WeightBacktest>()?;
+    m.add_class::<Direction>()?;
+    m.add_class::<DailyMetric>()?;
+    m.add_class::<TradePair>()?;
+    m.add_class::<SymbolResult>()?;
+    m.add_class::<BacktestResult>()?;
     Ok(())
 }

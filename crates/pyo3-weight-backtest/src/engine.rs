@@ -4,24 +4,27 @@ use crate::errors::CzscResult;
 use crate::processor::MetricProcessor;
 use crate::types::SymbolResult;
 use crate::utils::validate_dataframe;
-use anyhow::Context; // 引入 Context trait
+use anyhow::Context;
+// 引入 Context trait
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::RoundMode::HalfAwayFromZero;
 use polars::prelude::*;
+use pyo3::pyclass;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone)]
 pub struct BacktestEngine {
-    config: BacktestConfig,
-    df: DataFrame,
-    symbols: Vec<String>,
+    config   : BacktestConfig,
+    df       : DataFrame,
+    symbols  : Vec<String>,
     processor: MetricProcessor,
 }
 
+#[pyclass]
 pub struct BacktestResult {
-    pub symbol_results: HashMap<String, SymbolResult>,
-    pub portfolio_metrics: HashMap<String, f64>,
+    pub symbol_results    : HashMap<String, SymbolResult>,
+    pub portfolio_metrics : HashMap<String, f64>,
     pub daily_ew_return_df: DataFrame,
 }
 
@@ -95,12 +98,11 @@ impl BacktestEngine {
 
         let metrics = analyzer.analyze_portfolio_metrics()?;
 
-        let r = BacktestResult {
+        Ok(BacktestResult {
             symbol_results,
             portfolio_metrics: metrics,
             daily_ew_return_df: daily_ew_return_df,
-        };
-        Ok(r)
+        })
     }
 
     fn run_sequential(&self) -> CzscResult<HashMap<String, SymbolResult>> {

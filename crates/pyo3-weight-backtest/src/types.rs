@@ -28,6 +28,7 @@ pub enum TradeAction {
 }
 
 // 交易方向枚举
+#[pyclass]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub enum Direction {
     Long,
@@ -45,19 +46,31 @@ impl fmt::Display for Direction {
     }
 }
 
+#[pymethods]
+impl Direction {
+    fn __repr__(&self) -> String {
+        match self {
+            Direction::Long         => "Long".to_string(),
+            Direction::Short        => "Short".to_string(),
+            Direction::LongShort    => "LongShort".to_string(),
+        }
+    }
+}
+
 // 交易对结构体
+#[pyclass]
 #[derive(Debug, Clone, Serialize)]
 pub struct TradePair {
-    pub symbol        : String,
-    pub direction     : Direction,
-    pub open_dt       : NaiveDateTime,
-    pub close_dt      : NaiveDateTime,
-    pub open_price    : f64,
-    pub close_price   : f64,
-    pub bar_count     : usize,
-    pub event_sequence: String,
-    pub holding_days  : i64,
-    pub profit_ratio  : f64,
+    #[pyo3(get)] pub symbol        : String,
+    #[pyo3(get)] pub direction     : Direction,
+    #[pyo3(get)] pub open_dt       : String,
+    #[pyo3(get)] pub close_dt      : String,
+    #[pyo3(get)] pub open_price    : f64,
+    #[pyo3(get)] pub close_price   : f64,
+    #[pyo3(get)] pub bar_count     : usize,
+    #[pyo3(get)] pub event_sequence: String,
+    #[pyo3(get)] pub holding_days  : i64,
+    #[pyo3(get)] pub profit_ratio  : f64,
 }
 
 #[derive(Debug, Default)]
@@ -81,25 +94,27 @@ pub struct TradeEvaluation {
 }
 
 // DailyMetrics 结构体定义
+#[pyclass]
 #[derive(Debug, Clone, Serialize)]
 pub struct DailyMetric {
-    pub date          : NaiveDate,
-    pub symbol        : String,
-    pub edge          : f64,
-    pub return_val    : f64,
-    pub cost          : f64,
-    pub n1b           : f64,
-    pub turnover      : f64,
-    pub long_edge     : f64,
-    pub long_cost     : f64,
-    pub long_return   : f64,
-    pub long_turnover : f64,
-    pub short_edge    : f64,
-    pub short_cost    : f64,
-    pub short_return  : f64,
-    pub short_turnover: f64,
+    #[pyo3(get)] pub date          : String,
+    #[pyo3(get)] pub symbol        : String,
+    #[pyo3(get)] pub edge          : f64,
+    #[pyo3(get)] pub return_val    : f64,
+    #[pyo3(get)] pub cost          : f64,
+    #[pyo3(get)] pub n1b           : f64,
+    #[pyo3(get)] pub turnover      : f64,
+    #[pyo3(get)] pub long_edge     : f64,
+    #[pyo3(get)] pub long_cost     : f64,
+    #[pyo3(get)] pub long_return   : f64,
+    #[pyo3(get)] pub long_turnover : f64,
+    #[pyo3(get)] pub short_edge    : f64,
+    #[pyo3(get)] pub short_cost    : f64,
+    #[pyo3(get)] pub short_return  : f64,
+    #[pyo3(get)] pub short_turnover: f64,
 }
 
+#[pyclass]
 #[derive(Serialize, Debug)]
 pub struct SymbolResult {
     pub daily_metrics: Vec<DailyMetric>,
@@ -184,21 +199,21 @@ pub enum MetricKey {
 impl MetricKey {
     fn as_str(&self) -> &'static str {
         match self {
-            Self::TradeProfit => "单笔收益",
-            Self::HoldingBars => "持仓K线数",
-            Self::WinRate => "交易胜率",
-            Self::HoldingDays => "持仓天数",
-            Self::LongRatio => "多头占比",
-            Self::ShortRatio => "空头占比",
-            Self::VolatilityRatio => "波动比",
+            Self::TradeProfit           => "单笔收益",
+            Self::HoldingBars           => "持仓K线数",
+            Self::WinRate               => "交易胜率",
+            Self::HoldingDays           => "持仓天数",
+            Self::LongRatio             => "多头占比",
+            Self::ShortRatio            => "空头占比",
+            Self::VolatilityRatio       => "波动比",
             Self::VolatilityCorrelation => "与基准波动相关性",
-            Self::ReturnCorrelation => "与基准收益相关性",
-            Self::BearCorrelation => "与基准空头相关性",
-            Self::SymbolCount => "品种数量",
-            Self::MaxDrawdown => "最大回撤",
-            Self::SharpeRatio => "夏普比率",
-            Self::StartDate => "起始日期",
-            Self::EndDate => "结束日期",
+            Self::ReturnCorrelation     => "与基准收益相关性",
+            Self::BearCorrelation       => "与基准空头相关性",
+            Self::SymbolCount           => "品种数量",
+            Self::MaxDrawdown           => "最大回撤",
+            Self::SharpeRatio           => "夏普比率",
+            Self::StartDate             => "起始日期",
+            Self::EndDate               => "结束日期",
         }
     }
 }
