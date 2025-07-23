@@ -25,8 +25,6 @@
 ### 通过 pip 安装
 
 ```bash
-pip install weight_backtest_pyo3
-
 pip install maturin
 maturin develop
 ```
