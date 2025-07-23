@@ -115,10 +115,10 @@ pub struct DailyMetric {
 }
 
 #[pyclass]
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 pub struct SymbolResult {
-    pub daily_metrics: Vec<DailyMetric>,
-    pub trade_pairs  : Vec<TradePair>,
+    #[pyo3(get)] pub daily_metrics: Vec<DailyMetric>,
+    #[pyo3(get)] pub trade_pairs  : Vec<TradePair>,
 }
 
 /// 组合级绩效指标

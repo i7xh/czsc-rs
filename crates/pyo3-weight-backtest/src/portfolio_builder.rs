@@ -3,6 +3,7 @@ use crate::errors::CzscResult;
 use crate::stats::{daily_performance, evaluate_pairs};
 use crate::types::{Direction, SymbolResult, TradePair};
 use crate::utils::RoundTo;
+use chrono::{Days, NaiveDate};
 use polars::prelude::*;
 use std::collections::HashMap;
 
@@ -49,12 +50,27 @@ impl<'a> PortfolioMetricsBuilder<'a> {
         self.stats.insert("品种数量".to_string(), self.symbol_results.len() as f64);
 
         // 日期范围
-        if let Some(min_date) = self.daily_df.column("date")?.date()?.min() {
-            self.stats.insert("最小日期".to_string(), min_date as f64);
+        let base_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        if let Some(min_days)
+            = self.daily_df.column("date")?.str()?.cast(&DataType::Date)?.date()?.min() {
+            if let Some(min_date) = base_date
+                .checked_add_days(Days::new(min_days as u64)) {
+                self.stats.insert(
+                    "最小日期".to_string(),
+                    min_date.format("%Y%m%d").to_string().parse::<f64>()?
+                );
+            }
         }
 
-        if let Some(max_date) = self.daily_df.column("date")?.date()?.max() {
-            self.stats.insert("最大日期".to_string(), max_date as f64);
+        if let Some(max_days)
+            = self.daily_df.column("date")?.str()?.cast(&DataType::Date)?.date()?.max() {
+            if let Some(max_date) = base_date
+                .checked_add_days(Days::new(max_days as u64)) {
+                self.stats.insert(
+                    "最大日期".to_string(),
+                    max_date.format("%Y%m%d").to_string().parse::<f64>()?,
+                );
+            }
         }
 
         Ok(self)

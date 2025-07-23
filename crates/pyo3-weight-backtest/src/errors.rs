@@ -53,6 +53,9 @@ pub enum CzscError {
     #[error("Column not found: {0}")]
     ColumnNotFound(String),
 
+    #[error("Parse Float Error: {0}")]
+    ParseFloatError(#[from] std::num::ParseFloatError),
+
     #[error("未知错误: {0}")]
     Unknown(String),
 }
@@ -125,6 +128,9 @@ where
                 }
                 CzscError::ColumnNotFound(col) => {
                     CzscError::ColumnNotFound(format!("{}: {}", context, col))
+                }
+                _ => {
+                    CzscError::Unknown(format!("{}: {}", context, base_err.to_string()))
                 }
             }
         })

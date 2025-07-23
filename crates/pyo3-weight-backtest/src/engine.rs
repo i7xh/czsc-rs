@@ -10,6 +10,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::RoundMode::HalfAwayFromZero;
 use polars::prelude::*;
 use pyo3::pyclass;
+use pyo3_polars::PyDataFrame;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -23,9 +24,9 @@ pub struct BacktestEngine {
 
 #[pyclass]
 pub struct BacktestResult {
-    pub symbol_results    : HashMap<String, SymbolResult>,
-    pub portfolio_metrics : HashMap<String, f64>,
-    pub daily_ew_return_df: DataFrame,
+    #[pyo3(get)] pub symbol_results    : HashMap<String, SymbolResult>,
+    #[pyo3(get)] pub portfolio_metrics : HashMap<String, f64>,
+    #[pyo3(get)] pub daily_ew_return_df: PyDataFrame,
 }
 
 impl BacktestEngine {
@@ -101,7 +102,7 @@ impl BacktestEngine {
         Ok(BacktestResult {
             symbol_results,
             portfolio_metrics: metrics,
-            daily_ew_return_df: daily_ew_return_df,
+            daily_ew_return_df: PyDataFrame(daily_ew_return_df),
         })
     }
 

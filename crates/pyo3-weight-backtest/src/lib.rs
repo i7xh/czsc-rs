@@ -1,6 +1,5 @@
 mod analyzer;
 pub mod config;
-mod constants;
 pub mod engine;
 mod errors;
 mod portfolio_builder;
