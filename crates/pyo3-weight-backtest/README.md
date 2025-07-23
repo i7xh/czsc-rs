@@ -28,6 +28,18 @@
 pip install weight_backtest_pyo3
 
 pip install maturin
-maturin build --release
-pip install target/wheels/weight_backtest_pyo3-*.whl
+maturin develop
+```
+
+### python 调用 pyo3 包
+```python
+import pandas as pd
+import polars as pl
+from weight_backtest_pyo3 import WeightBacktest
+
+dfw = pd.read_feather("/your_feather_dir/weight_example.feather")
+df = pl.from_pandas(dfw)
+wbt = WeightBacktest(df, 3, "ts", 0.0002, 252, 1)
+r = wbt.run_backtest()
+```
 
