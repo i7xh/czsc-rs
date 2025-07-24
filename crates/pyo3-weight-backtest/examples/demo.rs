@@ -10,14 +10,15 @@ fn read_feather_sync(path: &str) -> DataFrame {
         .expect("Feather 格式错误")
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let df = read_feather_sync("/Users/i7xh/Downloads/weight_example.feather");
+    // let df = read_feather_sync("/Users/i7xh/Downloads/weight_example.feather");
+    let df = read_feather_sync("/Users/i7xh/works/a_share_daily_20170101_20250429.feather");
 
     let config = BacktestConfig::new(
         1,                // digits
         0.0002,           // fee_rate
         "ts".to_string(), // weight_type
         252,              // yearly_days
-        4,                // n_jobs
+        1,               // n_jobs
     )?;
 
     let engine = BacktestEngine::new(df, config.clone())?;
@@ -26,7 +27,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let daily_result = weight_backtest_pyo3::data_processing::calc_daily_results(df.clone(), "ZZUR9001", &config)?.collect()?;    // 应用函数
     // let shifted = engine::data_processing::gen_trade_pairs(df, "ZZUR9001", &config)?;
 
-    // 收集并打印结果
     unsafe {
         std::env::set_var("POLARS_FMT_MAX_COLS", "100");
     }

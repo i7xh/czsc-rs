@@ -30,14 +30,14 @@ impl WeightBacktest {
         weight_type: &str,
         fee_rate: f32,
         yearly_days: usize,
-        n_job: usize,
+        n_jobs: usize,
     ) -> PyResult<Self> {
         let config = BacktestConfig::new(
             digits,
             fee_rate,
             weight_type.to_string(),
             yearly_days,
-            n_job,
+            n_jobs,
         )?;
 
         Ok(WeightBacktest {

@@ -123,9 +123,11 @@ impl<'a> PortfolioAnalyzer<'a> {
         )?
         .fill_null(FillNullStrategy::Zero)?;
 
+        println!("finish pivot");
+
         let symbols = symbol_results.keys().map(|s| s.as_str()).collect::<Vec<&str>>();
 
-        let dret_lf = match weight_type {
+        let mut dret_lf = match weight_type {
             WeightType::TimeSeries => {
                 Self::add_agg_column(dret_df.lazy(), &symbols, AggType::Mean)?
             }
@@ -135,13 +137,45 @@ impl<'a> PortfolioAnalyzer<'a> {
             _ => return Err(CzscError::InvalidWeightType(weight_type).into()),
         };
 
-        Ok(dret_lf
+        println!("finish dret_lf");
+        /*let r = dret_lf
             .select(&[
                 col("date"),
                 all().exclude(["date"]).round(4, RoundMode::HalfAwayFromZero),
             ])
-            .with_row_index("idx", Some(0))
-            .collect()?)
+            // .with_row_index("idx", Some(0))
+            .collect()?;*/
+        // 先获取除 date 外的所有列名
+        let schema = dret_lf.collect_schema()?;
+        let non_date_cols: Vec<_> = schema
+            .iter_names()
+            .filter(|name| *name != "date")
+            .collect();
+
+        // 分批处理列 (每批 50 列)
+        let mut current_lf = dret_lf.clone();
+        for chunk in non_date_cols.chunks(100) { // 每批处理50列
+            println!(" Processing chunk: {:?}", chunk);
+            let exprs: Vec<Expr> = chunk.iter()
+                .map(|col_name|
+                    col(col_name.to_string()).round(4, RoundMode::HalfAwayFromZero).alias(col_name.to_string())
+                )
+                .collect();
+
+            current_lf = current_lf.with_columns(&exprs);
+        }
+
+        println!("finish chunk processing");
+
+        // 准备选择所有需要的列
+        current_lf = current_lf
+            .with_column(col("date"))
+            .with_row_index("idx", Some(0));
+        println!("finish row idx processing");
+
+        let r = current_lf.collect()?;
+        println!("finish dret_r");
+        Ok(r)
     }
     pub fn analyze_portfolio_metrics(&self) -> CzscResult<HashMap<String, f64>> {
         let metrics = PortfolioMetricsBuilder::new(

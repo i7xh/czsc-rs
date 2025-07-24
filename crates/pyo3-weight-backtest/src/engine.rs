@@ -5,12 +5,13 @@ use crate::processor::MetricProcessor;
 use crate::types::SymbolResult;
 use crate::utils::validate_dataframe;
 use anyhow::Context;
-// 引入 Context trait
 use indicatif::{ProgressBar, ProgressStyle};
 use polars::prelude::RoundMode::HalfAwayFromZero;
 use polars::prelude::*;
 use pyo3::pyclass;
 use pyo3_polars::PyDataFrame;
+use rayon::iter::IntoParallelRefIterator;
+use rayon::iter::ParallelIterator;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -129,7 +130,10 @@ impl BacktestEngine {
     }
 
     fn run_parallel(&self) -> CzscResult<HashMap<String, SymbolResult>> {
-        let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build()?;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(self.config.n_jobs)
+            .stack_size(256 * 1024 * 1024) // 256MB 栈大小
+            .build()?;
 
         // 创建进度条
         let pb = ProgressBar::new(self.symbols.len() as u64);
@@ -146,7 +150,7 @@ impl BacktestEngine {
         pool.install(|| {
             let results: Vec<CzscResult<(String, SymbolResult)>> = self
                 .symbols
-                .iter()
+                .par_iter()
                 .map(|symbol| {
                     // 处理当前 symbol
                     let result = self.process_symbol(symbol).map(|sr| (symbol.clone(), sr));
@@ -177,7 +181,7 @@ impl BacktestEngine {
             self.df.clone().lazy().filter(col("symbol").eq(lit(symbol.clone()))).collect()?;
 
         let column_names = symbol_df.get_column_names();
-        println!("Processing symbol: {}, columns: {:?}", symbol, column_names);
+        // println!("Processing symbol: {}, columns: {:?}", symbol, column_names);
 
         // 生成每日结果
         let daily_metrics = self.processor.process_daily_metrics(symbol, &symbol_df)?;

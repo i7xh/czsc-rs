@@ -78,6 +78,7 @@ impl<'a> PortfolioMetricsBuilder<'a> {
 
     /// 添加交易对统计指标
     pub fn add_trade_pair_metrics(mut self) -> CzscResult<Self> {
+        println!("process add_trade_pair_metrics");
         let trade_pairs: Vec<TradePair> = self
             .symbol_results
             .values()
@@ -96,6 +97,7 @@ impl<'a> PortfolioMetricsBuilder<'a> {
 
     /// 添加多空占比指标
     pub fn add_long_short_metrics(mut self) -> CzscResult<Self> {
+        println!("process add_long_short_metrics");
         let (long_rate, short_rate) = self.calculate_longshort_rates()?;
 
         self.stats.insert("多头占比".to_string(), long_rate.round_to(4));
@@ -106,6 +108,7 @@ impl<'a> PortfolioMetricsBuilder<'a> {
 
     /// 添加基准相关性指标
     pub fn add_benchmark_correlations(mut self) -> CzscResult<Self> {
+        println!("process add_benchmark_correlations");
         let alpha_df = self.get_alpha_df()?;
         let corr_stats = self.calculate_correlations(&alpha_df)?;
 
@@ -131,6 +134,7 @@ impl<'a> PortfolioMetricsBuilder<'a> {
 
     /// 添加组合收益指标
     pub fn add_portfolio_return_metrics(mut self) -> CzscResult<Self> {
+        println!("process add_portfolio_return_metrics");
         let returns: Vec<f64> =
             self.daily_ew_return_df.column("total")?.f64()?.into_iter().flatten().collect();
 
