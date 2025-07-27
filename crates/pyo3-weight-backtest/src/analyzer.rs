@@ -154,8 +154,8 @@ impl<'a> PortfolioAnalyzer<'a> {
 
         // 分批处理列 (每批 50 列)
         let mut current_lf = dret_lf.clone();
-        for chunk in non_date_cols.chunks(100) { // 每批处理50列
-            println!(" Processing chunk: {:?}", chunk);
+        for chunk in non_date_cols.chunks(500) { // 每批处理50列
+            // println!(" Processing chunk: {:?}", chunk);
             let exprs: Vec<Expr> = chunk.iter()
                 .map(|col_name|
                     col(col_name.to_string()).round(4, RoundMode::HalfAwayFromZero).alias(col_name.to_string())

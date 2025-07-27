@@ -45,7 +45,7 @@ impl BacktestEngine {
             .map(|s| s.to_string())
             .collect::<Vec<String>>();
 
-        println!("Symbols found: {:?}", symbols);
+        // println!("Symbols found: {:?}", symbols);
 
         // 预处理 dataframe
         let prepared_df = df
@@ -180,7 +180,7 @@ impl BacktestEngine {
         let symbol_df =
             self.df.clone().lazy().filter(col("symbol").eq(lit(symbol.clone()))).collect()?;
 
-        let column_names = symbol_df.get_column_names();
+        // let column_names = symbol_df.get_column_names();
         // println!("Processing symbol: {}, columns: {:?}", symbol, column_names);
 
         // 生成每日结果
